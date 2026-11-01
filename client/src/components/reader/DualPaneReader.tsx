@@ -26,11 +26,15 @@ import {
   PanelRightOpen,
   Send,
   Edit2,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 // Configure pdfjs worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+export type ViewingMode = 'raw' | 'annotated' | 'edit';
 
 interface DualPaneReaderProps {
   paper: Paper;
@@ -40,6 +44,88 @@ interface DualPaneReaderProps {
   initialNotes?: Note[];
   onBack: () => void;
   onShare?: () => void;
+}
+
+// Helper to get pixel-perfect client rects strictly wrapping characters (ignoring linebreaks and empty trailing whitespace)
+function getExactTextClientRects(range: Range, containerRect: DOMRect): HighlightRect[] {
+  const rects: HighlightRect[] = [];
+  const treeWalker = document.createTreeWalker(
+    range.commonAncestorContainer,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        return range.intersectsNode(node)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    }
+  );
+
+  let currentNode = treeWalker.nextNode();
+  while (currentNode) {
+    const textNode = currentNode as Text;
+    const text = textNode.nodeValue || '';
+
+    let start = 0;
+    let end = text.length;
+
+    if (textNode === range.startContainer) {
+      start = range.startOffset;
+    }
+    if (textNode === range.endContainer) {
+      end = range.endOffset;
+    }
+
+    const selectedSlice = text.slice(start, end);
+    if (selectedSlice.trim().length > 0) {
+      // Exclude leading/trailing whitespace offsets
+      const leadingSpace = selectedSlice.length - selectedSlice.trimStart().length;
+      const trailingSpace = selectedSlice.length - selectedSlice.trimEnd().length;
+
+      const trimmedStart = start + leadingSpace;
+      const trimmedEnd = end - trailingSpace;
+
+      if (trimmedStart < trimmedEnd) {
+        const subRange = document.createRange();
+        subRange.setStart(textNode, trimmedStart);
+        subRange.setEnd(textNode, trimmedEnd);
+
+        const subRects = subRange.getClientRects();
+        for (let i = 0; i < subRects.length; i++) {
+          const r = subRects[i];
+          // Filter out empty or whitespace/linebreak phantom rects
+          if (r.width > 2 && r.height > 2) {
+            rects.push({
+              x: (r.left - containerRect.left) / containerRect.width,
+              y: (r.top - containerRect.top) / containerRect.height,
+              width: r.width / containerRect.width,
+              height: r.height / containerRect.height,
+            });
+          }
+        }
+      }
+    }
+
+    currentNode = treeWalker.nextNode();
+  }
+
+  // Fallback safely if treeWalker didn't find multiple nodes
+  if (rects.length === 0) {
+    const clientRects = range.getClientRects();
+    for (let i = 0; i < clientRects.length; i++) {
+      const r = clientRects[i];
+      if (r.width > 2 && r.height > 2) {
+        rects.push({
+          x: (r.left - containerRect.left) / containerRect.width,
+          y: (r.top - containerRect.top) / containerRect.height,
+          width: r.width / containerRect.width,
+          height: r.height / containerRect.height,
+        });
+      }
+    }
+  }
+
+  return rects;
 }
 
 export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
@@ -61,6 +147,12 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   const [totalPages, setTotalPages] = useState(paper.page_count || 1);
   const [scale, setScale] = useState(1.15);
   const [loadingPdf, setLoadingPdf] = useState(true);
+
+  // Viewing Mode:
+  // - 'raw': original clean PDF (no highlights/notes)
+  // - 'annotated': read-only view with highlights & sticky notes
+  // - 'edit': full editing and annotating
+  const [viewingMode, setViewingMode] = useState<ViewingMode>(isPublic ? 'annotated' : 'edit');
 
   // Tools & UI Mode: 'select' for text selection, 'draw' for drag-box highlighting
   const [toolMode, setToolMode] = useState<'select' | 'draw'>('select');
@@ -194,7 +286,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
   // Handle native text selection (Mode 1: Text Selection Tool)
   const handleTextMouseUp = () => {
-    if (isPublic || toolMode !== 'select') return;
+    if (isPublic || viewingMode !== 'edit' || toolMode !== 'select') return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !containerRef.current) {
@@ -206,36 +298,38 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
     const range = selection.getRangeAt(0);
     const containerRect = containerRef.current.getBoundingClientRect();
-    const clientRects = range.getClientRects();
-    if (clientRects.length === 0) return;
 
-    const normalizedRects: HighlightRect[] = [];
-    for (let i = 0; i < clientRects.length; i++) {
-      const r = clientRects[i];
-      normalizedRects.push({
-        x: (r.left - containerRect.left) / containerRect.width,
-        y: (r.top - containerRect.top) / containerRect.height,
-        width: r.width / containerRect.width,
-        height: r.height / containerRect.height,
-      });
+    // Use tight text walker to calculate rects ONLY for characters (never trailing whitespace/newlines)
+    const normalizedRects = getExactTextClientRects(range, containerRect);
+    if (normalizedRects.length === 0) return;
+
+    const lastRect = normalizedRects[normalizedRects.length - 1];
+    const pixelX = lastRect.x * containerRect.width;
+    const pixelY = (lastRect.y + lastRect.height) * containerRect.height + 8;
+
+    const cardWidth = 320;
+    const cardHeight = 220;
+    const posX = Math.max(10, Math.min(pixelX, containerRect.width - cardWidth - 10));
+    let posY = pixelY;
+    if (posY + cardHeight > containerRect.height) {
+      posY = Math.max(10, lastRect.y * containerRect.height - cardHeight - 8);
     }
 
-    const lastRect = clientRects[clientRects.length - 1];
     setNewAnnotation({
       rects: normalizedRects,
       selectedText: text,
-      pos: {
-        x: Math.min(lastRect.left - containerRect.left, containerRect.width - 320),
-        y: Math.min(lastRect.bottom - containerRect.top + 8, containerRect.height - 200),
-      },
+      pos: { x: posX, y: posY },
     });
     setAnnotationNoteText('');
   };
 
-  // Extract text within a drawn bounding box by inspecting overlapping spans in textLayer
-  const extractTextInBox = (box: HighlightRect): string => {
-    if (!containerRef.current || !textLayerRef.current) return '';
-    const containerRect = containerRef.current.getBoundingClientRect();
+  // Extract tight text spans within a drawn bounding box (never extending to the right margin)
+  const extractTightTextAndRectsInBox = (
+    box: HighlightRect,
+    containerRect: DOMRect
+  ): { rects: HighlightRect[]; text: string } => {
+    if (!textLayerRef.current) return { rects: [box], text: '' };
+
     const boxLeft = containerRect.left + box.x * containerRect.width;
     const boxTop = containerRect.top + box.y * containerRect.height;
     const boxRight = containerRect.left + (box.x + box.width) * containerRect.width;
@@ -243,27 +337,47 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
     const spans = textLayerRef.current.querySelectorAll('span');
     const words: string[] = [];
+    const tightRects: HighlightRect[] = [];
 
     spans.forEach((span) => {
       const sRect = span.getBoundingClientRect();
-      // Check if span intersects with box
       const intersects = !(
         sRect.right < boxLeft ||
         sRect.left > boxRight ||
         sRect.bottom < boxTop ||
         sRect.top > boxBottom
       );
-      if (intersects && span.textContent) {
+
+      if (intersects && span.textContent && span.textContent.trim()) {
         words.push(span.textContent.trim());
+
+        // Clamp the highlight strictly to the span bounds (never extending beyond the span to the right!)
+        const clampLeft = Math.max(sRect.left, boxLeft);
+        const clampRight = Math.min(sRect.right, boxRight);
+        const clampTop = Math.max(sRect.top, boxTop);
+        const clampBottom = Math.min(sRect.bottom, boxBottom);
+
+        if (clampRight > clampLeft && clampBottom > clampTop) {
+          tightRects.push({
+            x: (clampLeft - containerRect.left) / containerRect.width,
+            y: (clampTop - containerRect.top) / containerRect.height,
+            width: (clampRight - clampLeft) / containerRect.width,
+            height: (clampBottom - clampTop) / containerRect.height,
+          });
+        }
       }
     });
 
-    return words.filter(Boolean).join(' ');
+    const text = words.join(' ');
+    return {
+      rects: tightRects.length > 0 ? tightRects : [box],
+      text: text,
+    };
   };
 
   // Drag-to-Box Highlight (Mode 2: Drag Area / Box Tool)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isPublic || toolMode !== 'draw' || !containerRef.current) return;
+    if (isPublic || viewingMode !== 'edit' || toolMode !== 'draw' || !containerRef.current) return;
     // Ignore if clicking inside active cards or sticky pins
     const target = e.target as HTMLElement;
     if (target.closest('.annotation-card') || target.closest('.note-pin')) return;
@@ -298,20 +412,17 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       setCurrentDrawBox({ x, y, width, height });
     };
 
-    const onWindowMouseUp = (e: MouseEvent) => {
+    const onWindowMouseUp = () => {
       if (!isDrawing || !drawStart || !containerRef.current) {
         setIsDrawing(false);
         return;
       }
 
       const rect = containerRef.current.getBoundingClientRect();
-      const currentX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const currentY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-
-      const x = Math.min(drawStart.x, currentX);
-      const y = Math.min(drawStart.y, currentY);
-      const width = Math.abs(currentX - drawStart.x);
-      const height = Math.abs(currentY - drawStart.y);
+      const x = currentDrawBox?.x || drawStart.x;
+      const y = currentDrawBox?.y || drawStart.y;
+      const width = currentDrawBox?.width || 0;
+      const height = currentDrawBox?.height || 0;
 
       setIsDrawing(false);
       setCurrentDrawBox(null);
@@ -319,9 +430,9 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
       // Trigger if box size > 1% width and > 0.5% height
       if (width > 0.012 && height > 0.008) {
-        const box: HighlightRect = { x, y, width, height };
-        const extracted = extractTextInBox(box);
-        const snippet = extracted || `Area Highlight (Page ${currentPage})`;
+        const rawBox: HighlightRect = { x, y, width, height };
+        const { rects: tightRects, text: extracted } = extractTightTextAndRectsInBox(rawBox, rect);
+        const snippet = extracted || `Selected Area (Page ${currentPage})`;
 
         const cardWidth = 320;
         const cardHeight = 220;
@@ -334,7 +445,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
         }
 
         setNewAnnotation({
-          rects: [box],
+          rects: tightRects,
           selectedText: snippet,
           pos: { x: posX, y: posY },
         });
@@ -349,7 +460,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       window.removeEventListener('mousemove', onWindowMouseMove);
       window.removeEventListener('mouseup', onWindowMouseUp);
     };
-  }, [isDrawing, drawStart, currentPage]);
+  }, [isDrawing, drawStart, currentDrawBox, currentPage]);
 
   // Save On-Page Highlight & Note
   const handleSaveOnPageAnnotation = async (withNote = true) => {
@@ -390,6 +501,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
   // Inspect existing highlight / sticky note on page
   const handleOpenHighlight = (hl: Highlight) => {
+    if (viewingMode === 'raw') return;
     setInspectedHighlight(hl);
     const existingNote = notes.find((n) => n.highlight_id === hl.id);
     if (existingNote) {
@@ -500,7 +612,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       {/* Top Header Controls Bar */}
       <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 z-30 shadow-md">
         {/* Left: Back & Title */}
-        <div className="flex items-center gap-3 truncate max-w-md">
+        <div className="flex items-center gap-3 truncate max-w-sm">
           <button
             onClick={onBack}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
@@ -514,17 +626,68 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           </div>
         </div>
 
-        {/* Center: Interactive Tool Mode & Pagination Controls */}
-        <div className="flex items-center gap-3">
-          {/* Tool Mode Selector */}
-          {!isPublic && (
-            <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700/80">
+        {/* Center: Viewing Mode + Tool Modes + Pagination */}
+        <div className="flex items-center gap-2.5">
+          {/* Segmented Viewing Mode: Raw vs Annotated vs Edit */}
+          <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700/80">
+            <button
+              onClick={() => {
+                setViewingMode('raw');
+                setNewAnnotation(null);
+                setInspectedHighlight(null);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                viewingMode === 'raw'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="อ่านข้อมูลดิบ (ซ่อนไฮไลต์และโน้ตทั้งหมด)"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              <span>ข้อมูลดิบ (Raw)</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setViewingMode('annotated');
+                setNewAnnotation(null);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                viewingMode === 'annotated'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="อ่านพร้อมไฮไลต์และโน้ต (โหมดอ่านอย่างเดียว)"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>อ่านพร้อมโน้ต</span>
+            </button>
+
+            {!isPublic && (
+              <button
+                onClick={() => setViewingMode('edit')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  viewingMode === 'edit'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="โหมดแก้ไขและจดโน้ตเพิ่มเติม"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>จดโน้ต (Edit)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Sub-tool Selector (Only visible in 'edit' mode) */}
+          {viewingMode === 'edit' && !isPublic && (
+            <div className="flex items-center bg-slate-800/90 rounded-xl p-1 border border-slate-700/80">
               <button
                 onClick={() => {
                   setToolMode('select');
                   setIsDrawing(false);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                   toolMode === 'select'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
@@ -532,7 +695,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 title="โหมดเลือกข้อความ (Text Selection)"
               >
                 <MousePointer className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Text Select</span>
+                <span className="hidden md:inline">Select</span>
               </button>
 
               <button
@@ -540,20 +703,20 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                   setToolMode('draw');
                   window.getSelection()?.removeAllRanges();
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                   toolMode === 'draw'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="โหมดลากครอบพื้นที่ / กล่องไฮไลต์ (Drag Area Highlight & Note)"
+                title="โหมดลากครอบพื้นที่ (Drag to Note)"
               >
                 <Pencil className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Drag to Note</span>
+                <span className="hidden md:inline">Drag to Note</span>
               </button>
             </div>
           )}
 
-          {/* Pagination */}
+          {/* Pagination Controls */}
           <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60">
             <button
               disabled={currentPage <= 1}
@@ -576,8 +739,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             </button>
           </div>
 
-          {/* Zoom */}
-          <div className="hidden md:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60">
+          {/* Zoom Controls */}
+          <div className="hidden lg:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60">
             <button
               onClick={() => setScale((s) => Math.max(s - 0.15, 0.6))}
               className="p-1 rounded text-slate-300 hover:bg-slate-700"
@@ -659,11 +822,25 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       <div className="flex-1 flex overflow-hidden">
         {/* PDF Canvas Viewport */}
         <div className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text">
-          {/* Floating mode helper */}
-          {toolMode === 'draw' && (
+          {/* Floating mode banner helpers */}
+          {viewingMode === 'raw' && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
+              <EyeOff className="w-3.5 h-3.5" />
+              <span>โหมดข้อมูลดิบ: ซ่อนไฮไลต์และโน้ตทั้งหมดสำหรับอ่านเอกสารต้นฉบับ</span>
+            </div>
+          )}
+
+          {viewingMode === 'annotated' && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-blue-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
+              <Eye className="w-3.5 h-3.5" />
+              <span>โหมดอ่านพร้อมโน้ต (Read-Only): คลิกที่ไฮไลต์หรือหมุด 💬 เพื่ออ่านโน้ต</span>
+            </div>
+          )}
+
+          {viewingMode === 'edit' && toolMode === 'draw' && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-amber-500 text-slate-950 text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
               <Pencil className="w-3.5 h-3.5" />
-              <span>โหมด Drag to Note: คลิกและลากเมาส์ครอบข้อความหรือพื้นที่เพื่อจดโน้ต</span>
+              <span>โหมด Drag to Note: คลิกและลากเมาส์ครอบข้อความเพื่อจดโน้ต</span>
             </div>
           )}
 
@@ -677,25 +854,26 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               ref={containerRef}
               onMouseDown={handleMouseDown}
               onMouseUp={() => {
-                if (toolMode === 'select') {
+                if (viewingMode === 'edit' && toolMode === 'select') {
                   handleTextMouseUp();
                 }
               }}
               style={{
-                userSelect: isDrawing || toolMode === 'draw' ? 'none' : 'auto',
+                userSelect: isDrawing || (viewingMode === 'edit' && toolMode === 'draw') ? 'none' : 'auto',
               }}
               className={`relative shadow-2xl bg-white rounded-sm my-auto inline-block ${
-                toolMode === 'draw' ? 'cursor-crosshair' : 'cursor-text'
+                viewingMode === 'edit' && toolMode === 'draw' ? 'cursor-crosshair' : 'cursor-text'
               }`}
             >
               {/* PDF Canvas */}
               <canvas ref={canvasRef} className="block select-text" />
+
               {/* Native PDF.js Text Layer (Enables real selectable text matching PDF coordinates) */}
               <div
                 ref={textLayerRef}
                 className="textLayer absolute inset-0 select-text overflow-hidden pointer-events-auto"
                 style={{
-                  pointerEvents: toolMode === 'select' ? 'auto' : 'none',
+                  pointerEvents: viewingMode === 'edit' && toolMode === 'draw' ? 'none' : 'auto',
                 }}
               />
 
@@ -711,57 +889,60 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                   }}
                 />
               )}
-              {/* Saved Highlights on Current Page */}
-              {highlights
-                .filter((h) => h.page_index === currentPage)
-                .map((hl) => {
-                  const hasNote = notes.some((n) => n.highlight_id === hl.id);
-                  const firstRect = hl.rects[0];
 
-                  return (
-                    <React.Fragment key={hl.id}>
-                      {hl.rects.map((r, i) => (
-                        <div
-                          key={i}
-                          onClick={() => handleOpenHighlight(hl)}
-                          className={`absolute cursor-pointer transition-opacity z-10 ${
-                            activeHighlightId === hl.id
-                              ? 'opacity-85 ring-2 ring-blue-500 ring-offset-1'
-                              : 'opacity-40 hover:opacity-75'
-                          }`}
-                          style={{
-                            left: `${r.x * 100}%`,
-                            top: `${r.y * 100}%`,
-                            width: `${r.width * 100}%`,
-                            height: `${r.height * 100}%`,
-                            backgroundColor: hl.color || '#FBBF24',
-                          }}
-                          title={hl.selected_text}
-                        />
-                      ))}
+              {/* Saved Highlights on Current Page (Hidden in 'raw' mode) */}
+              {viewingMode !== 'raw' &&
+                highlights
+                  .filter((h) => h.page_index === currentPage)
+                  .map((hl) => {
+                    const hasNote = notes.some((n) => n.highlight_id === hl.id);
+                    const firstRect = hl.rects[0];
 
-                      {/* Sticky Note Pin right on the PDF page */}
-                      {hasNote && firstRect && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenHighlight(hl);
-                          }}
-                          className="note-pin absolute z-20 -translate-y-1/2 p-1 rounded-full bg-blue-600 text-white shadow-md hover:scale-125 transition-transform"
-                          style={{
-                            left: `${Math.min((firstRect.x + firstRect.width) * 100 + 0.5, 96)}%`,
-                            top: `${firstRect.y * 100}%`,
-                          }}
-                        >
-                          <MessageSquare className="w-3 h-3" />
-                        </button>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
+                    return (
+                      <React.Fragment key={hl.id}>
+                        {hl.rects.map((r, i) => (
+                          <div
+                            key={i}
+                            onClick={() => handleOpenHighlight(hl)}
+                            className={`absolute cursor-pointer transition-opacity z-10 ${
+                              activeHighlightId === hl.id
+                                ? 'opacity-85 ring-2 ring-blue-500 ring-offset-1'
+                                : 'opacity-40 hover:opacity-75'
+                            }`}
+                            style={{
+                              left: `${r.x * 100}%`,
+                              top: `${r.y * 100}%`,
+                              width: `${r.width * 100}%`,
+                              height: `${r.height * 100}%`,
+                              backgroundColor: hl.color || '#FBBF24',
+                            }}
+                            title={hl.selected_text}
+                          />
+                        ))}
 
-              {/* DIRECT ON-PAGE ANNOTATION CARD (ปรากฏบนหน้า PDF ให้พิมพ์จดโน้ตได้ทันที) */}
-              {newAnnotation && (
+                        {/* Sticky Note Pin right on the PDF page */}
+                        {hasNote && firstRect && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenHighlight(hl);
+                            }}
+                            className="note-pin absolute z-20 -translate-y-1/2 p-1 rounded-full bg-blue-600 text-white shadow-md hover:scale-125 transition-transform"
+                            style={{
+                              left: `${Math.min((firstRect.x + firstRect.width) * 100 + 0.5, 96)}%`,
+                              top: `${firstRect.y * 100}%`,
+                            }}
+                            title="Click to view/edit on-page note"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                          </button>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+
+              {/* DIRECT ON-PAGE ANNOTATION CARD (Only in 'edit' mode) */}
+              {viewingMode === 'edit' && newAnnotation && (
                 <div
                   className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
                   style={{
@@ -816,6 +997,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                     placeholder="พิมพ์โน้ตสำหรับจุดนี้... (กด ⌘+Enter เพื่อบันทึก)"
                     className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none mb-3"
                   />
+
                   {/* Save Buttons */}
                   <div className="flex items-center justify-between gap-2">
                     <button
@@ -840,8 +1022,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 </div>
               )}
 
-              {/* INSPECTED ON-PAGE STICKY NOTE CARD (เปิดดูหรือแก้ไขโน้ตที่จดไว้ตรงตำแหน่งนั้น) */}
-              {inspectedHighlight && (
+              {/* INSPECTED ON-PAGE STICKY NOTE CARD (Read-only in 'annotated' mode, Editable in 'edit' mode) */}
+              {viewingMode !== 'raw' && inspectedHighlight && (
                 <div
                   className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
                   style={{
@@ -857,10 +1039,15 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                         style={{ backgroundColor: inspectedHighlight.color || '#FBBF24' }}
                       />
                       <span>โน้ตในหน้า {inspectedHighlight.page_index}</span>
+                      {viewingMode === 'annotated' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-normal">
+                          Read-Only
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {!isPublic && (
+                      {!isPublic && viewingMode === 'edit' && (
                         <button
                           onClick={() => handleDeleteHighlight(inspectedHighlight.id)}
                           className="p-1 text-slate-400 hover:text-red-500 rounded"
@@ -884,7 +1071,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                   </p>
 
                   {/* Note Body */}
-                  {editingInspectedNote ? (
+                  {editingInspectedNote && viewingMode === 'edit' ? (
                     <div className="space-y-2">
                       <textarea
                         rows={3}
@@ -922,7 +1109,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                         </p>
                       )}
 
-                      {!isPublic && (
+                      {!isPublic && viewingMode === 'edit' && (
                         <button
                           type="button"
                           onClick={() => setEditingInspectedNote(true)}
@@ -949,7 +1136,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 <span>Paper Synthesis Notes</span>
               </span>
 
-              {!isPublic && (
+              {!isPublic && viewingMode === 'edit' && (
                 <button
                   onClick={handleSaveMainNote}
                   disabled={savingNote}
@@ -971,7 +1158,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               <TipTapEditor
                 content={mainNoteContent}
                 onChange={setMainNoteContent}
-                editable={!isPublic}
+                editable={!isPublic && viewingMode === 'edit'}
               />
             </div>
           </div>

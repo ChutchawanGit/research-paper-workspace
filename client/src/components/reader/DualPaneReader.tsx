@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Paper, Highlight, Note, HighlightRect } from '../../types';
 import { highlightsApi, notesApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -26,13 +27,14 @@ import {
   PanelRightOpen,
   Send,
   Edit2,
-  LogOut,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertCircle,
+  LogOut
 } from 'lucide-react';
 
-// Configure pdfjs worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Configure same-origin pdfjs worker (eliminates cross-origin block on mobile Android & Samsung Internet)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export type ViewingMode = 'raw' | 'annotated' | 'edit';
 
@@ -203,14 +205,21 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  // Load PDF Document
-  useEffect(() => {
+  const renderTaskRef = useRef<{ cancel: () => void; promise: Promise<unknown> } | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  // Load PDF with mobile fallback options
+  const loadPdf = useCallback(() => {
     let isCancelled = false;
     setLoadingPdf(true);
+    setPdfError(null);
 
     const loadingTask = pdfjsLib.getDocument({
       url: pdfUrl,
       withCredentials: true,
+      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',
+      cMapPacked: true,
+      enableXfa: true,
     });
 
     loadingTask.promise
@@ -224,6 +233,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       .catch((err: unknown) => {
         if (!isCancelled) {
           console.error('Failed to load PDF', err);
+          setPdfError('ไม่สามารถโหลดเอกสาร PDF ได้ กรุณากดลองใหม่อีกครั้ง');
           setLoadingPdf(false);
         }
       });
@@ -233,34 +243,47 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
     };
   }, [pdfUrl]);
 
-  // Load Highlights and Notes (if not public)
   useEffect(() => {
-    if (isPublic) return;
-
-    highlightsApi.list(paper.id).then((res) => setHighlights(res.data)).catch(() => {});
-    notesApi.list(paper.id).then((res) => {
-      setNotes(res.data);
-      const generalNote = res.data.find((n) => !n.highlight_id);
-      if (generalNote) {
-        setMainNoteContent(generalNote.content);
-        setMainNoteId(generalNote.id);
-      }
-    }).catch(() => {});
-  }, [paper.id, isPublic]);
+    const cancel = loadPdf();
+    return () => {
+      if (cancel) cancel();
+    };
+  }, [loadPdf]);
 
   // Auto-scale PDF comfortably on mobile/tablet viewports
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (window.innerWidth < 640) {
-        setScale(0.85);
-      } else if (window.innerWidth < 1024) {
-        setScale(1.0);
-      }
+  const calculateResponsiveScale = useCallback(() => {
+    if (typeof window === 'undefined') return 1.0;
+    const w = window.innerWidth;
+    if (w < 480) {
+      return Math.min(0.9, Math.max(0.45, (w - 24) / 612));
+    } else if (w < 768) {
+      return 0.9;
+    } else if (w < 1024) {
+      return 1.05;
     }
+    return 1.15;
   }, []);
+
+  useEffect(() => {
+    setScale(calculateResponsiveScale());
+
+    const handleResize = () => {
+      setScale(calculateResponsiveScale());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [calculateResponsiveScale]);
   // Render current page with Canvas AND TextLayer
   const renderPage = useCallback(async () => {
     if (!pdfDoc || !canvasRef.current) return;
+
+    // Cancel any in-flight rendering task before starting a new one
+    if (renderTaskRef.current) {
+      try {
+        renderTaskRef.current.cancel();
+      } catch {}
+      renderTaskRef.current = null;
+    }
 
     try {
       const page = await pdfDoc.getPage(currentPage);
@@ -269,22 +292,27 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       const context = canvas.getContext('2d');
       if (!context) return;
 
-      canvas.height = viewport.height;
       canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
 
       const renderContext = {
         canvasContext: context,
         viewport: viewport,
         canvas: canvas,
       };
+      const task = page.render(renderContext);
+      renderTaskRef.current = task;
 
-      await page.render(renderContext).promise;
+      await task.promise;
+      renderTaskRef.current = null;
 
       // Render native interactive Text Layer for selecting text on the page
       if (textLayerRef.current) {
         textLayerRef.current.innerHTML = '';
-        textLayerRef.current.style.width = `${viewport.width}px`;
-        textLayerRef.current.style.height = `${viewport.height}px`;
+        textLayerRef.current.style.width = `${Math.floor(viewport.width)}px`;
+        textLayerRef.current.style.height = `${Math.floor(viewport.height)}px`;
 
         const textContent = await page.getTextContent();
         const textLayer = new pdfjsLib.TextLayer({
@@ -295,10 +323,12 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
         await textLayer.render();
       }
     } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'RenderingCancelledException') {
+        return;
+      }
       console.error('Render page error', err);
     }
   }, [pdfDoc, currentPage, scale]);
-
   useEffect(() => {
     renderPage();
   }, [renderPage]);
@@ -878,7 +908,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           )}
 
           {viewingMode === 'annotated' && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-blue-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
+            <div className="hidden sm:flex absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-blue-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg items-center gap-2 pointer-events-none animate-in fade-in duration-150">
               <Eye className="w-3.5 h-3.5" />
               <span>โหมดอ่านพร้อมโน้ต (Read-Only): คลิกที่ไฮไลต์หรือหมุด 💬 เพื่ออ่านโน้ต</span>
             </div>
@@ -891,10 +921,22 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             </div>
           )}
 
-          {loadingPdf ? (
+          {pdfError ? (
+            <div className="flex flex-col items-center justify-center my-auto py-12 px-4 text-center">
+              <AlertCircle className="w-10 h-10 text-amber-500 mb-2" />
+              <h3 className="text-sm font-bold text-white mb-1">ไม่สามารถโหลดเอกสาร PDF ได้</h3>
+              <p className="text-xs text-slate-400 max-w-xs mb-4">{pdfError}</p>
+              <button
+                onClick={() => loadPdf()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm"
+              >
+                ลองใหม่อีกครั้ง
+              </button>
+            </div>
+          ) : loadingPdf ? (
             <div className="flex flex-col items-center justify-center my-auto text-slate-400">
               <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <span className="text-sm">Rendering PDF document...</span>
+              <span className="text-sm">กำลังเปิดไฟล์ PDF...</span>
             </div>
           ) : (
             <div
@@ -908,12 +950,12 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               style={{
                 userSelect: isDrawing || (viewingMode === 'edit' && toolMode === 'draw') ? 'none' : 'auto',
               }}
-              className={`relative shadow-2xl bg-white rounded-sm my-auto inline-block ${
+              className={`pdf-canvas-container relative shadow-2xl bg-white rounded-sm my-auto inline-block max-w-full ${
                 viewingMode === 'edit' && toolMode === 'draw' ? 'cursor-crosshair' : 'cursor-text'
               }`}
             >
               {/* PDF Canvas */}
-              <canvas ref={canvasRef} className="block select-text" />
+              <canvas ref={canvasRef} className="block select-text max-w-full h-auto" />
 
               {/* Native PDF.js Text Layer (Enables real selectable text matching PDF coordinates) */}
               <div

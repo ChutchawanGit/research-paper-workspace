@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -141,6 +142,9 @@ func (h *ShareHandler) StreamPublicPDF(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "inline; filename=\""+data.Paper.Title+".pdf\"")
+	if data.Paper.FileSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(data.Paper.FileSize, 10))
+	}
 	w.Header().Set("Accept-Ranges", "bytes")
 	_, _ = io.Copy(w, stream)
 }

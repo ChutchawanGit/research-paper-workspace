@@ -255,6 +255,9 @@ func (h *PaperHandler) StreamPDF(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "inline; filename=\""+paper.Title+".pdf\"")
+	if paper.FileSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(paper.FileSize, 10))
+	}
 	w.Header().Set("Accept-Ranges", "bytes")
 	_, _ = io.Copy(w, stream)
 }

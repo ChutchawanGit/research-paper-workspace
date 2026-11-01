@@ -30,7 +30,10 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  LogOut
+  LogOut,
+  SlidersHorizontal,
+  MoreVertical,
+  BookOpen
 } from 'lucide-react';
 
 // Configure same-origin pdfjs worker (eliminates cross-origin block on mobile Android & Samsung Internet)
@@ -212,6 +215,43 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   const [mainNoteId, setMainNoteId] = useState<string | null>(null);
   const [savingNote, setSavingNote] = useState(false);
   const [noteSavedFeedback, setNoteSavedFeedback] = useState(false);
+  // Mobile Quick Navigation & Touch Gestures
+  const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
+  const [showPageJumpModal, setShowPageJumpModal] = useState(false);
+  const [jumpPageInput, setJumpPageInput] = useState(1);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+
+    const diffX = touchEndX - touchStartXRef.current;
+    const diffY = touchEndY - touchStartYRef.current;
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      if (diffX < 0) {
+        setCurrentPage((p) => Math.min(p + 1, totalPages));
+      } else {
+        setCurrentPage((p) => Math.max(p - 1, 1));
+      }
+    }
+  };
+
+  useEffect(() => {
+    setJumpPageInput(currentPage);
+  }, [currentPage]);
 
   // DOM Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -826,8 +866,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             </div>
           )}
 
-          {/* Pagination Controls */}
-          <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
+          {/* Desktop Pagination Controls */}
+          <div className="hidden sm:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
             <button
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
@@ -836,7 +876,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] sm:text-xs font-mono font-medium text-slate-300 px-1 sm:px-2">
+            <span className="text-xs font-mono font-medium text-slate-300 px-2">
               {currentPage} / {totalPages}
             </span>
             <button
@@ -849,7 +889,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             </button>
           </div>
 
-          {/* Zoom Controls */}
+          {/* Zoom Controls (Desktop only) */}
           <div className="hidden lg:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
             <button
               onClick={() => setScale((s) => Math.max(s - 0.15, 0.6))}
@@ -871,37 +911,40 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
         {/* Right Header Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            onClick={handleExportNotes}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
-            title="Download Notes & Highlights as Markdown"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Export Notes</span>
-          </button>
-
-          {!isPublic && onShare && (
-            <button
-              onClick={onShare}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Share</span>
-            </button>
-          )}
-          {/* Mobile Notes Drawer Trigger */}
+          {/* Notes Drawer Button */}
           <button
             onClick={() => setShowRightPane(true)}
-            className="inline-flex sm:hidden items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+            title="เปิดแถบสมุดโน้ต"
           >
             <MessageSquare className="w-3.5 h-3.5" />
             <span>โน้ต ({notes.length})</span>
           </button>
 
-          {/* Toggle Full-screen PDF vs Split Pane */}
+          {/* Desktop Only Buttons */}
+          <button
+            onClick={handleExportNotes}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
+            title="Download Notes & Highlights as Markdown"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export</span>
+          </button>
+
+          {!isPublic && onShare && (
+            <button
+              onClick={onShare}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share</span>
+            </button>
+          )}
+
+          {/* Desktop Toggle Split Pane */}
           <button
             onClick={() => setShowRightPane(!showRightPane)}
-            className={`p-1.5 rounded-lg border text-xs font-medium transition-all ${
+            className={`hidden sm:inline-flex p-1.5 rounded-lg border text-xs font-medium transition-all ${
               showRightPane
                 ? 'bg-blue-600 text-white border-blue-500'
                 : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
@@ -915,10 +958,62 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             )}
           </button>
 
+          {/* Mobile "••• More" Menu Button */}
+          <div className="relative sm:hidden">
+            <button
+              onClick={() => setShowMobileMoreMenu(!showMobileMoreMenu)}
+              className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              title="ตัวเลือกเพิ่มเติม"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showMobileMoreMenu && (
+              <div className="absolute right-0 top-10 w-44 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    setShowMobileMoreMenu(false);
+                    handleExportNotes();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-700 text-slate-200 text-left"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Export Notes</span>
+                </button>
+
+                {!isPublic && onShare && (
+                  <button
+                    onClick={() => {
+                      setShowMobileMoreMenu(false);
+                      onShare();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-700 text-slate-200 text-left"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                    <span>แชร์เอกสาร</span>
+                  </button>
+                )}
+
+                {!isPublic && (
+                  <button
+                    onClick={() => {
+                      setShowMobileMoreMenu(false);
+                      setShowLogoutModal(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-950 text-red-400 text-left"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>ออกจากระบบ</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {!isPublic && (
             <button
               onClick={() => setShowLogoutModal(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors ml-0.5"
+              className="hidden sm:inline-flex p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors ml-0.5"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -939,7 +1034,11 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       {/* Main Reader View */}
       <div className="flex-1 flex overflow-hidden">
         {/* PDF Canvas Viewport */}
-        <div className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text">
+        <div
+          className="flex-1 bg-slate-950 overflow-auto flex justify-center p-2 sm:p-4 lg:p-6 relative select-text"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {viewingMode === 'raw' && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
               <EyeOff className="w-3.5 h-3.5" />
@@ -1271,6 +1370,86 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
             </div>
           )}
         </div>
+        {/* Floating Bottom Page Bar on Mobile */}
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 shadow-2xl rounded-full px-2 py-1 flex items-center gap-2 text-white sm:hidden">
+          <button
+            disabled={currentPage <= 1}
+            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            className="p-1.5 rounded-full hover:bg-slate-800 active:scale-95 disabled:opacity-30 transition-all"
+            title="หน้าก่อนหน้า"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setShowPageJumpModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-xs font-mono font-medium transition-all"
+          >
+            <span>{currentPage} / {totalPages}</span>
+            <SlidersHorizontal className="w-3 h-3 text-blue-400" />
+          </button>
+
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            className="p-1.5 rounded-full hover:bg-slate-800 active:scale-95 disabled:opacity-30 transition-all"
+            title="หน้าถัดไป"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Quick Page Jump Modal with Range Slider */}
+        {showPageJumpModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-xs shadow-2xl text-white animate-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-400" />
+                  <span>สลับไปหน้า</span>
+                </h3>
+                <button
+                  onClick={() => setShowPageJumpModal(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-center my-4">
+                <span className="text-4xl font-mono font-bold text-blue-400">{jumpPageInput}</span>
+                <span className="text-xs text-slate-400 ml-1.5">/ {totalPages}</span>
+              </div>
+
+              <input
+                type="range"
+                min={1}
+                max={totalPages}
+                value={jumpPageInput}
+                onChange={(e) => setJumpPageInput(Number(e.target.value))}
+                className="w-full accent-blue-500 cursor-pointer mb-5 h-2 bg-slate-700 rounded-lg appearance-none"
+              />
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowPageJumpModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded-lg"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentPage(jumpPageInput);
+                    setShowPageJumpModal(false);
+                  }}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                >
+                  เปิดหน้านี้
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dual-Pane Right Panel: Paper Notes & Synthesis */}
         {/* Dual-Pane Right Panel: Responsive Drawer on Mobile, Side-by-Side on Desktop */}

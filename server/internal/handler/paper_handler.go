@@ -255,6 +255,10 @@ func (h *PaperHandler) StreamPDF(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "inline; filename=\""+paper.Title+".pdf\"")
+	if seeker, ok := stream.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, paper.Title+".pdf", paper.UpdatedAt, seeker)
+		return
+	}
 	if paper.FileSize > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(paper.FileSize, 10))
 	}

@@ -90,7 +90,7 @@ func main() {
 		AllowOriginFunc: func(r *http.Request, origin string) bool {
 			return true // Supports localhost, Tailscale IPs, and public ts.net domains
 		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link", "Content-Disposition"},
 		AllowCredentials: true,
@@ -112,6 +112,7 @@ func main() {
 	// Public Share Routes (No authentication required)
 	r.Get("/api/public/share/{token}", shareHandler.GetPublic)
 	r.Get("/api/public/share/{token}/pdf", shareHandler.StreamPublicPDF)
+	r.Head("/api/public/share/{token}/pdf", shareHandler.StreamPublicPDF)
 
 	// Public / Showcase Routes (Read-only, enhanced if authenticated)
 	r.Group(func(public chi.Router) {
@@ -121,6 +122,7 @@ func main() {
 		public.Get("/api/papers", paperHandler.List)
 		public.Get("/api/papers/{id}", paperHandler.Get)
 		public.Get("/api/papers/{id}/pdf", paperHandler.StreamPDF)
+		public.Head("/api/papers/{id}/pdf", paperHandler.StreamPDF)
 		public.Get("/api/papers/{id}/highlights", hlHandler.ListByPaper)
 		public.Get("/api/papers/{id}/notes", noteHandler.ListByPaper)
 	})

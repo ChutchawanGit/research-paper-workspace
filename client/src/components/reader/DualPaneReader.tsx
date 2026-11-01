@@ -232,8 +232,9 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       })
       .catch((err: unknown) => {
         if (!isCancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
           console.error('Failed to load PDF', err);
-          setPdfError('ไม่สามารถโหลดเอกสาร PDF ได้ กรุณากดลองใหม่อีกครั้ง');
+          setPdfError(msg || 'ไม่สามารถโหลดเอกสาร PDF ได้ กรุณากดลองใหม่อีกครั้ง');
           setLoadingPdf(false);
         }
       });

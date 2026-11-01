@@ -142,6 +142,10 @@ func (h *ShareHandler) StreamPublicPDF(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", "inline; filename=\""+data.Paper.Title+".pdf\"")
+	if seeker, ok := stream.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, data.Paper.Title+".pdf", data.Paper.UpdatedAt, seeker)
+		return
+	}
 	if data.Paper.FileSize > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(data.Paper.FileSize, 10))
 	}

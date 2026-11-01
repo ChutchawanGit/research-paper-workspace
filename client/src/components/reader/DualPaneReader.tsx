@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import type { Paper, Highlight, Note, HighlightRect } from '../../types';
 import { highlightsApi, notesApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -324,10 +324,11 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
         await textLayer.render();
       }
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'name' in err && err.name === 'RenderingCancelledException') {
+      const errObj = err as { name?: string; message?: string };
+      if (errObj?.name === 'RenderingCancelledException') {
         return;
       }
-      console.error('Render page error', err);
+      console.error('Render page error details:', errObj?.name, errObj?.message, err);
     }
   }, [pdfDoc, currentPage, scale]);
   useEffect(() => {

@@ -138,6 +138,19 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
   return rects;
 }
 
+function getHighlightRgba(hex: string, alpha = 0.42): string {
+  if (!hex || !hex.startsWith('#')) return `rgba(251, 191, 36, ${alpha})`;
+  let c = hex.slice(1);
+  if (c.length === 3) {
+    c = c.split('').map((x) => x + x).join('');
+  }
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return `rgba(251, 191, 36, ${alpha})`;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   paper,
@@ -301,19 +314,26 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
     try {
       const page = await pdfDoc.getPage(currentPage);
-      const viewport = page.getViewport({ scale });
+      // DPR scaling: minimum 2.5x for razor-sharp rendering on Retina and Samsung AMOLED displays
+      const dpr = Math.max(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2.5);
+
+      // High-resolution viewport for internal bitmap
+      const renderViewport = page.getViewport({ scale: scale * dpr });
+      // Normal display viewport for CSS layout and text layer
+      const displayViewport = page.getViewport({ scale: scale });
+
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       if (!context) return;
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
+      canvas.width = Math.floor(renderViewport.width);
+      canvas.height = Math.floor(renderViewport.height);
+      canvas.style.width = `${Math.floor(displayViewport.width)}px`;
+      canvas.style.height = `${Math.floor(displayViewport.height)}px`;
 
       const renderContext = {
         canvasContext: context,
-        viewport: viewport,
+        viewport: renderViewport,
         canvas: canvas,
       };
       const task = page.render(renderContext);
@@ -322,17 +342,17 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       await task.promise;
       renderTaskRef.current = null;
 
-      // Render native interactive Text Layer for selecting text on the page
+      // Render native interactive Text Layer matching displayViewport
       if (textLayerRef.current) {
         textLayerRef.current.innerHTML = '';
-        textLayerRef.current.style.width = `${Math.floor(viewport.width)}px`;
-        textLayerRef.current.style.height = `${Math.floor(viewport.height)}px`;
+        textLayerRef.current.style.width = `${Math.floor(displayViewport.width)}px`;
+        textLayerRef.current.style.height = `${Math.floor(displayViewport.height)}px`;
 
         const textContent = await page.getTextContent();
         const textLayer = new pdfjsLib.TextLayer({
           textContentSource: textContent,
           container: textLayerRef.current,
-          viewport: viewport,
+          viewport: displayViewport,
         });
         await textLayer.render();
       }
@@ -1026,9 +1046,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                               top: `${r.y * 100}%`,
                               width: `${r.width * 100}%`,
                               height: `${r.height * 100}%`,
-                              backgroundColor: hl.color || '#FBBF24',
-                              mixBlendMode: 'multiply',
-                              opacity: 0.65,
+                              backgroundColor: getHighlightRgba(hl.color || '#FBBF24', activeHighlightId === hl.id ? 0.7 : 0.45),
+                              borderBottom: `2px solid ${hl.color || '#FBBF24'}`,
                               borderRadius: '2px',
                               pointerEvents: viewingMode === 'edit' && toolMode === 'draw' ? 'none' : 'auto',
                             }}

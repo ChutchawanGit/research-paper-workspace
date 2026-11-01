@@ -87,7 +87,9 @@ func main() {
 	r.Use(chimw.Timeout(60 * time.Second))
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"},
+		AllowOriginFunc: func(r *http.Request, origin string) bool {
+			return true // Supports localhost, Tailscale IPs, and public ts.net domains
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link", "Content-Disposition"},

@@ -48,11 +48,7 @@ func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CollectionHandler) List(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	cols, err := h.colService.ListByUser(r.Context(), userID)
 	if err != nil {

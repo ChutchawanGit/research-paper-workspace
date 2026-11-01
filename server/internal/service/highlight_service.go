@@ -57,7 +57,10 @@ func (s *HighlightService) Create(ctx context.Context, input CreateHighlightInpu
 }
 
 func (s *HighlightService) ListByPaper(ctx context.Context, paperID, userID uuid.UUID) ([]*domain.Highlight, error) {
-	return s.hlRepo.ListByPaper(ctx, paperID, userID)
+	if userID != uuid.Nil {
+		return s.hlRepo.ListByPaper(ctx, paperID, userID)
+	}
+	return s.hlRepo.ListByPaperPublic(ctx, paperID)
 }
 
 func (s *HighlightService) ListByPaperPublic(ctx context.Context, paperID uuid.UUID) ([]*domain.Highlight, error) {

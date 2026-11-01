@@ -13,6 +13,7 @@ function MainApp() {
   const [activePaper, setActivePaper] = useState<Paper | null>(null);
   const [sharePaper, setSharePaper] = useState<Paper | null>(null);
   const [publicShareToken, setPublicShareToken] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     // Check for public share link in URL: /share/:token
@@ -34,28 +35,25 @@ function MainApp() {
     return <PublicShareView token={publicShareToken} onGoHome={handleGoHome} />;
   }
 
+  // Bright, clean loading state (Never pitch-black)
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-300">
-        <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <h2 className="text-lg font-semibold tracking-tight">Paper Platform</h2>
-        <p className="text-xs text-slate-500 mt-1">Starting session...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-800">
+        <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-lg font-bold tracking-tight text-slate-900">Paper Platform</h2>
+        <p className="text-xs text-slate-400 mt-1">Starting research workspace...</p>
       </div>
     );
   }
 
-  // Not logged in: Show Auth Screen
-  if (!user) {
-    return <AuthModal isOpen={true} />;
-  }
-
-  // Active Reader View
+  // Active Reader View (Works for logged-in users and public visitors in read-only mode)
   if (activePaper) {
     return (
       <>
         <DualPaneReader
           paper={activePaper}
           pdfUrl={papersApi.pdfUrl(activePaper.id)}
+          isPublic={!user}
           onBack={() => setActivePaper(null)}
           onShare={() => setSharePaper(activePaper)}
         />
@@ -66,12 +64,31 @@ function MainApp() {
             onClose={() => setSharePaper(null)}
           />
         )}
+        {showAuthModal && (
+          <AuthModal
+            isOpen={true}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
       </>
     );
   }
 
-  // Authenticated Dashboard
-  return <Dashboard onOpenReader={(paper) => setActivePaper(paper)} />;
+  // Showcase Dashboard (Accessible to everyone without login, sign-in accessible from navbar)
+  return (
+    <>
+      <Dashboard
+        onOpenReader={(paper) => setActivePaper(paper)}
+        onOpenSignIn={() => setShowAuthModal(true)}
+      />
+      {showAuthModal && (
+        <AuthModal
+          isOpen={true}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
+    </>
+  );
 }
 
 export function App() {

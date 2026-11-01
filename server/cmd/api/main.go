@@ -113,7 +113,19 @@ func main() {
 	r.Get("/api/public/share/{token}", shareHandler.GetPublic)
 	r.Get("/api/public/share/{token}/pdf", shareHandler.StreamPublicPDF)
 
-	// Protected Routes
+	// Public / Showcase Routes (Read-only, enhanced if authenticated)
+	r.Group(func(public chi.Router) {
+		public.Use(middleware.OptionalAuthMiddleware(authService))
+
+		public.Get("/api/collections", colHandler.List)
+		public.Get("/api/papers", paperHandler.List)
+		public.Get("/api/papers/{id}", paperHandler.Get)
+		public.Get("/api/papers/{id}/pdf", paperHandler.StreamPDF)
+		public.Get("/api/papers/{id}/highlights", hlHandler.ListByPaper)
+		public.Get("/api/papers/{id}/notes", noteHandler.ListByPaper)
+	})
+
+	// Protected Routes (Require authenticated session)
 	r.Group(func(protected chi.Router) {
 		protected.Use(middleware.AuthMiddleware(authService))
 
@@ -121,29 +133,23 @@ func main() {
 		protected.Get("/api/auth/me", authHandler.Me)
 		protected.Post("/api/auth/logout", authHandler.Logout)
 
-		// Collections
-		protected.Get("/api/collections", colHandler.List)
+		// Collections Management
 		protected.Post("/api/collections", colHandler.Create)
 		protected.Get("/api/collections/{id}", colHandler.Get)
 		protected.Put("/api/collections/{id}", colHandler.Update)
 		protected.Delete("/api/collections/{id}", colHandler.Delete)
 
-		// Papers
-		protected.Get("/api/papers", paperHandler.List)
+		// Papers Management
 		protected.Post("/api/papers/upload", paperHandler.Upload)
-		protected.Get("/api/papers/{id}", paperHandler.Get)
 		protected.Put("/api/papers/{id}", paperHandler.Update)
 		protected.Delete("/api/papers/{id}", paperHandler.Delete)
-		protected.Get("/api/papers/{id}/pdf", paperHandler.StreamPDF)
 
-		// Highlights
-		protected.Get("/api/papers/{id}/highlights", hlHandler.ListByPaper)
+		// Highlights Management
 		protected.Post("/api/papers/{id}/highlights", hlHandler.Create)
 		protected.Put("/api/highlights/{id}/color", hlHandler.UpdateColor)
 		protected.Delete("/api/highlights/{id}", hlHandler.Delete)
 
-		// Notes
-		protected.Get("/api/papers/{id}/notes", noteHandler.ListByPaper)
+		// Notes Management
 		protected.Post("/api/papers/{id}/notes", noteHandler.Create)
 		protected.Put("/api/notes/{id}", noteHandler.Update)
 		protected.Delete("/api/notes/{id}", noteHandler.Delete)

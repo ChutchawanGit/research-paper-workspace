@@ -112,9 +112,13 @@ func (r *paperRepo) List(ctx context.Context, filter domain.PaperFilter) ([]*dom
 	var args []interface{}
 	idx := 1
 
-	conditions = append(conditions, fmt.Sprintf("p.user_id = $%d", idx))
-	args = append(args, filter.UserID)
-	idx++
+	if filter.UserID != uuid.Nil {
+		conditions = append(conditions, fmt.Sprintf("p.user_id = $%d", idx))
+		args = append(args, filter.UserID)
+		idx++
+	} else {
+		conditions = append(conditions, "1=1")
+	}
 
 	if filter.CollectionID != nil {
 		conditions = append(conditions, fmt.Sprintf("p.collection_id = $%d", idx))

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, Search, Upload, LogOut, User as UserIcon, Menu, X } from 'lucide-react';
+import { BookOpen, Search, Upload, LogOut, User as UserIcon, Menu, X, LogIn } from 'lucide-react';
 import { LogoutConfirmModal } from './LogoutConfirmModal';
 
 interface NavbarProps {
@@ -9,6 +9,7 @@ interface NavbarProps {
   onOpenUpload: () => void;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  onOpenSignIn?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUpload,
   onToggleSidebar,
   isSidebarOpen = false,
+  onOpenSignIn,
 }) => {
   const { user, logout } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -88,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="hidden sm:inline">Upload Paper</span>
         </button>
 
-        {user && (
+        {user ? (
           <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-3 border-l border-slate-200">
             <div className="hidden xl:flex flex-col text-right max-w-[140px] truncate">
               <span className="text-xs font-semibold text-slate-800 truncate leading-tight">{user.name}</span>
@@ -105,7 +107,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <LogOut className="w-4 h-4" />
             </button>
           </div>
-        )}
+        ) : onOpenSignIn ? (
+          <button
+            onClick={onOpenSignIn}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all ml-1 shrink-0"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Sign In</span>
+          </button>
+        ) : null}
       </div>
 
       {/* Mobile Search Dropdown Bar */}

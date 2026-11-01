@@ -42,7 +42,10 @@ func (s *NoteService) Create(ctx context.Context, input CreateNoteInput) (*domai
 }
 
 func (s *NoteService) ListByPaper(ctx context.Context, paperID, userID uuid.UUID) ([]*domain.Note, error) {
-	return s.noteRepo.ListByPaper(ctx, paperID, userID)
+	if userID != uuid.Nil {
+		return s.noteRepo.ListByPaper(ctx, paperID, userID)
+	}
+	return s.noteRepo.ListByPaperPublic(ctx, paperID)
 }
 
 func (s *NoteService) ListByPaperPublic(ctx context.Context, paperID uuid.UUID) ([]*domain.Note, error) {

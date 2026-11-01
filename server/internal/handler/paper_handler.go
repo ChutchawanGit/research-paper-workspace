@@ -90,11 +90,7 @@ func (h *PaperHandler) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PaperHandler) List(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	q := r.URL.Query()
 	filter := domain.PaperFilter{
@@ -137,11 +133,7 @@ func (h *PaperHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PaperHandler) Get(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -239,11 +231,7 @@ func (h *PaperHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PaperHandler) StreamPDF(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

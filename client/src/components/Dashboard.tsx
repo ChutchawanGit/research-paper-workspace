@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Collection, Paper, ReadingStatus } from '../types';
 import { collectionsApi, papersApi } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { PaperCard } from './PaperCard';
@@ -10,9 +11,11 @@ import { Plus, BookOpen, AlertCircle } from 'lucide-react';
 
 interface DashboardProps {
   onOpenReader: (paper: Paper) => void;
+  onOpenSignIn?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn }) => {
+  const { user } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +104,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
       <Navbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenUpload={() => {
+          if (!user) {
+            onOpenSignIn?.();
+            return;
+          }
+          setIsUploadOpen(true);
+        }}
+        onOpenSignIn={onOpenSignIn}
         isSidebarOpen={isMobileSidebarOpen}
         onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
       />
@@ -138,7 +148,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
             </div>
 
             <button
-              onClick={() => setIsUploadOpen(true)}
+              onClick={() => {
+                if (!user) {
+                  onOpenSignIn?.();
+                  return;
+                }
+                setIsUploadOpen(true);
+              }}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow transition-all shrink-0"
             >
               <Plus className="w-4 h-4" />

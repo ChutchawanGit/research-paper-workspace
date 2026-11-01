@@ -61,16 +61,31 @@ func (r *collectionRepo) GetByID(ctx context.Context, id uuid.UUID, userID uuid.
 }
 
 func (r *collectionRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]*domain.Collection, error) {
-	query := `
-		SELECT c.id, c.user_id, c.name, c.description, c.color, c.created_at, c.updated_at,
-		       COUNT(p.id) as paper_count
-		FROM collections c
-		LEFT JOIN papers p ON p.collection_id = c.id
-		WHERE c.user_id = $1
-		GROUP BY c.id
-		ORDER BY c.name ASC
-	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	var query string
+	var rows *sql.Rows
+	var err error
+	if userID != uuid.Nil {
+		query = `
+			SELECT c.id, c.user_id, c.name, c.description, c.color, c.created_at, c.updated_at,
+			       COUNT(p.id) as paper_count
+			FROM collections c
+			LEFT JOIN papers p ON p.collection_id = c.id
+			WHERE c.user_id = $1
+			GROUP BY c.id
+			ORDER BY c.name ASC
+		`
+		rows, err = r.db.QueryContext(ctx, query, userID)
+	} else {
+		query = `
+			SELECT c.id, c.user_id, c.name, c.description, c.color, c.created_at, c.updated_at,
+			       COUNT(p.id) as paper_count
+			FROM collections c
+			LEFT JOIN papers p ON p.collection_id = c.id
+			GROUP BY c.id
+			ORDER BY c.name ASC
+		`
+		rows, err = r.db.QueryContext(ctx, query)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("collectionRepo.ListByUser: %w", err)
 	}

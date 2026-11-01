@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, KeyRound, Mail, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { BookOpen, KeyRound, Mail, User, AlertCircle, ArrowRight, X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose?: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
@@ -50,7 +50,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-white text-center">
+        <div className="relative bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-white text-center">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md mb-4 shadow-inner">
             <BookOpen className="w-8 h-8 text-white" />
           </div>

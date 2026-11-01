@@ -19,22 +19,7 @@ const (
 func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tokenString := ""
-
-			// 1. Check HttpOnly Cookie
-			cookie, err := r.Cookie("auth_token")
-			if err == nil && cookie.Value != "" {
-				tokenString = cookie.Value
-			}
-
-			// 2. Fallback to Authorization Header (Bearer token)
-			if tokenString == "" {
-				authHeader := r.Header.Get("Authorization")
-				if strings.HasPrefix(authHeader, "Bearer ") {
-					tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-				}
-			}
-
+			tokenString := extractToken(r)
 			if tokenString == "" {
 				http.Error(w, `{"error":"unauthorized: missing token"}`, http.StatusUnauthorized)
 				return
@@ -51,6 +36,35 @@ func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Ha
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func OptionalAuthMiddleware(authService *service.AuthService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenString := extractToken(r)
+			if tokenString != "" {
+				if claims, err := authService.ValidateToken(tokenString); err == nil {
+					ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
+					ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
+					r = r.WithContext(ctx)
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func extractToken(r *http.Request) string {
+	cookie, err := r.Cookie("auth_token")
+	if err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	return ""
 }
 
 func GetUserIDFromContext(ctx context.Context) (uuid.UUID, bool) {

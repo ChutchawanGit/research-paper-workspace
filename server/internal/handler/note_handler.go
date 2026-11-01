@@ -63,11 +63,7 @@ func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *NoteHandler) ListByPaper(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	paperIDStr := chi.URLParam(r, "id")
 	paperID, err := uuid.Parse(paperIDStr)

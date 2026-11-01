@@ -99,7 +99,10 @@ func (s *PaperService) UploadPaper(ctx context.Context, input UploadPaperInput) 
 }
 
 func (s *PaperService) GetByID(ctx context.Context, id, userID uuid.UUID) (*domain.Paper, error) {
-	return s.paperRepo.GetByID(ctx, id, userID)
+	if userID != uuid.Nil {
+		return s.paperRepo.GetByID(ctx, id, userID)
+	}
+	return s.paperRepo.GetByIDPublic(ctx, id)
 }
 
 func (s *PaperService) GetByIDPublic(ctx context.Context, id uuid.UUID) (*domain.Paper, error) {

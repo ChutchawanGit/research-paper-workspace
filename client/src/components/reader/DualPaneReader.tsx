@@ -251,6 +251,19 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
     };
   }, [loadPdf]);
 
+  // Load Highlights and Notes for this paper from database
+  useEffect(() => {
+    highlightsApi.list(paper.id).then((res) => setHighlights(res.data)).catch(() => {});
+    notesApi.list(paper.id).then((res) => {
+      setNotes(res.data);
+      const generalNote = res.data.find((n) => !n.highlight_id);
+      if (generalNote) {
+        setMainNoteContent(generalNote.content);
+        setMainNoteId(generalNote.id);
+      }
+    }).catch(() => {});
+  }, [paper.id]);
+
   // Auto-scale PDF comfortably on mobile/tablet viewports
   const calculateResponsiveScale = useCallback(() => {
     if (typeof window === 'undefined') return 1.0;
@@ -337,7 +350,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
   // Handle native text selection (Mode 1: Text Selection Tool)
   const handleTextMouseUp = () => {
-    if (isPublic || viewingMode !== 'edit' || toolMode !== 'select') return;
+    if (viewingMode !== 'edit' || toolMode !== 'select') return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !containerRef.current) {
@@ -425,10 +438,9 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       text: text,
     };
   };
-
   // Drag-to-Box Highlight (Mode 2: Drag Area / Box Tool)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isPublic || viewingMode !== 'edit' || toolMode !== 'draw' || !containerRef.current) return;
+    if (viewingMode !== 'edit' || toolMode !== 'draw' || !containerRef.current) return;
     // Ignore if clicking inside active cards or sticky pins
     const target = e.target as HTMLElement;
     if (target.closest('.annotation-card') || target.closest('.note-pin')) return;
@@ -742,25 +754,23 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               <span className="sm:hidden text-[11px]">โน้ต</span>
             </button>
 
-            {!isPublic && (
-              <button
-                onClick={() => setViewingMode('edit')}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  viewingMode === 'edit'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="โหมดแก้ไขและจดโน้ตเพิ่มเติม"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">จดโน้ต (Edit)</span>
-                <span className="sm:hidden text-[11px]">แก้</span>
-              </button>
-            )}
+            <button
+              onClick={() => setViewingMode('edit')}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                viewingMode === 'edit'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="โหมดแก้ไขและจดโน้ตเพิ่มเติม"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">จดโน้ต (Edit)</span>
+              <span className="sm:hidden text-[11px]">แก้</span>
+            </button>
           </div>
 
           {/* Sub-tool Selector (Only visible in 'edit' mode) */}
-          {viewingMode === 'edit' && !isPublic && (
+          {viewingMode === 'edit' && (
             <div className="hidden sm:flex items-center bg-slate-800/90 rounded-xl p-0.5 sm:p-1 border border-slate-700/80 shrink-0">
               <button
                 onClick={() => {
@@ -859,6 +869,14 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               <span className="hidden sm:inline">Share</span>
             </button>
           )}
+          {/* Mobile Notes Drawer Trigger */}
+          <button
+            onClick={() => setShowRightPane(true)}
+            className="inline-flex sm:hidden items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>โน้ต ({notes.length})</span>
+          </button>
 
           {/* Toggle Full-screen PDF vs Split Pane */}
           <button
@@ -1043,11 +1061,15 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               {viewingMode === 'edit' && newAnnotation && (
                 <div
                   ref={cardRef}
-                  className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
-                  style={{
-                    left: `${newAnnotation.pos.x}px`,
-                    top: `${newAnnotation.pos.y}px`,
-                  }}
+                  className="annotation-card fixed sm:absolute bottom-3 inset-x-3 sm:bottom-auto sm:inset-x-auto z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 sm:w-80 text-slate-800 animate-in fade-in slide-in-from-bottom-2 sm:slide-in-from-top-0 duration-150"
+                  style={
+                    typeof window !== 'undefined' && window.innerWidth >= 640
+                      ? {
+                          left: `${newAnnotation.pos.x}px`,
+                          top: `${newAnnotation.pos.y}px`,
+                        }
+                      : undefined
+                  }
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -1125,11 +1147,15 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               {viewingMode !== 'raw' && inspectedHighlight && (
                 <div
                   ref={cardRef}
-                  className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
-                  style={{
-                    left: `${Math.min(inspectedHighlight.rects[0]?.x * 100 || 10, 65)}%`,
-                    top: `${Math.min((inspectedHighlight.rects[0]?.y || 10) * 100 + 4, 80)}%`,
-                  }}
+                  className="annotation-card fixed sm:absolute bottom-3 inset-x-3 sm:bottom-auto sm:inset-x-auto z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 sm:w-80 text-slate-800 animate-in fade-in slide-in-from-bottom-2 sm:slide-in-from-top-0 duration-150"
+                  style={
+                    typeof window !== 'undefined' && window.innerWidth >= 640
+                      ? {
+                          left: `${Math.min(inspectedHighlight.rects[0]?.x * 100 || 10, 65)}%`,
+                          top: `${Math.min((inspectedHighlight.rects[0]?.y || 10) * 100 + 4, 80)}%`,
+                        }
+                      : undefined
+                  }
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
@@ -1147,7 +1173,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {!isPublic && viewingMode === 'edit' && (
+                      {viewingMode === 'edit' && (
                         <button
                           onClick={() => handleDeleteHighlight(inspectedHighlight.id)}
                           className="p-1 text-slate-400 hover:text-red-500 rounded"
@@ -1209,7 +1235,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                         </p>
                       )}
 
-                      {!isPublic && viewingMode === 'edit' && (
+                      {viewingMode === 'edit' && (
                         <button
                           type="button"
                           onClick={() => setEditingInspectedNote(true)}

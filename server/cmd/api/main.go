@@ -74,8 +74,8 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 	colHandler := handler.NewCollectionHandler(colService)
 	paperHandler := handler.NewPaperHandler(paperService)
-	hlHandler := handler.NewHighlightHandler(hlService)
-	noteHandler := handler.NewNoteHandler(noteService)
+	hlHandler := handler.NewHighlightHandler(hlService, paperService)
+	noteHandler := handler.NewNoteHandler(noteService, paperService)
 	shareHandler := handler.NewShareHandler(shareService, paperService)
 
 	// 6. Router & Middleware
@@ -124,7 +124,13 @@ func main() {
 		public.Get("/api/papers/{id}/pdf", paperHandler.StreamPDF)
 		public.Head("/api/papers/{id}/pdf", paperHandler.StreamPDF)
 		public.Get("/api/papers/{id}/highlights", hlHandler.ListByPaper)
+		public.Post("/api/papers/{id}/highlights", hlHandler.Create)
+		public.Put("/api/highlights/{id}/color", hlHandler.UpdateColor)
+		public.Delete("/api/highlights/{id}", hlHandler.Delete)
 		public.Get("/api/papers/{id}/notes", noteHandler.ListByPaper)
+		public.Post("/api/papers/{id}/notes", noteHandler.Create)
+		public.Put("/api/notes/{id}", noteHandler.Update)
+		public.Delete("/api/notes/{id}", noteHandler.Delete)
 	})
 
 	// Protected Routes (Require authenticated session)
@@ -145,16 +151,6 @@ func main() {
 		protected.Post("/api/papers/upload", paperHandler.Upload)
 		protected.Put("/api/papers/{id}", paperHandler.Update)
 		protected.Delete("/api/papers/{id}", paperHandler.Delete)
-
-		// Highlights Management
-		protected.Post("/api/papers/{id}/highlights", hlHandler.Create)
-		protected.Put("/api/highlights/{id}/color", hlHandler.UpdateColor)
-		protected.Delete("/api/highlights/{id}", hlHandler.Delete)
-
-		// Notes Management
-		protected.Post("/api/papers/{id}/notes", noteHandler.Create)
-		protected.Put("/api/notes/{id}", noteHandler.Update)
-		protected.Delete("/api/notes/{id}", noteHandler.Delete)
 
 		// Share Links
 		protected.Get("/api/papers/{id}/share", shareHandler.GetByPaper)

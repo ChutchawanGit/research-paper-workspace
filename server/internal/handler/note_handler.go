@@ -12,11 +12,12 @@ import (
 )
 
 type NoteHandler struct {
-	noteService *service.NoteService
+	noteService  *service.NoteService
+	paperService *service.PaperService
 }
 
-func NewNoteHandler(noteService *service.NoteService) *NoteHandler {
-	return &NoteHandler{noteService: noteService}
+func NewNoteHandler(noteService *service.NoteService, paperService *service.PaperService) *NoteHandler {
+	return &NoteHandler{noteService: noteService, paperService: paperService}
 }
 
 type createNoteReq struct {
@@ -26,11 +27,7 @@ type createNoteReq struct {
 }
 
 func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	paperIDStr := chi.URLParam(r, "id")
 	paperID, err := uuid.Parse(paperIDStr)
@@ -39,6 +36,12 @@ func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if userID == uuid.Nil {
+		paper, err := h.paperService.GetByIDPublic(r.Context(), paperID)
+		if err == nil && paper != nil {
+			userID = paper.UserID
+		}
+	}
 	var req createNoteReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		Error(w, http.StatusBadRequest, "invalid request body")
@@ -85,11 +88,7 @@ func (h *NoteHandler) ListByPaper(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *NoteHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -114,11 +113,7 @@ func (h *NoteHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

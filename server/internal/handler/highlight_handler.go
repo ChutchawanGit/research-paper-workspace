@@ -12,11 +12,12 @@ import (
 )
 
 type HighlightHandler struct {
-	hlService *service.HighlightService
+	hlService    *service.HighlightService
+	paperService *service.PaperService
 }
 
-func NewHighlightHandler(hlService *service.HighlightService) *HighlightHandler {
-	return &HighlightHandler{hlService: hlService}
+func NewHighlightHandler(hlService *service.HighlightService, paperService *service.PaperService) *HighlightHandler {
+	return &HighlightHandler{hlService: hlService, paperService: paperService}
 }
 
 type createHighlightReq struct {
@@ -27,17 +28,20 @@ type createHighlightReq struct {
 }
 
 func (h *HighlightHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	paperIDStr := chi.URLParam(r, "id")
 	paperID, err := uuid.Parse(paperIDStr)
 	if err != nil {
 		Error(w, http.StatusBadRequest, "invalid paper id")
 		return
+	}
+
+	if userID == uuid.Nil {
+		paper, err := h.paperService.GetByIDPublic(r.Context(), paperID)
+		if err == nil && paper != nil {
+			userID = paper.UserID
+		}
 	}
 
 	var req createHighlightReq
@@ -91,11 +95,7 @@ type updateColorReq struct {
 }
 
 func (h *HighlightHandler) UpdateColor(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -119,11 +119,7 @@ func (h *HighlightHandler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HighlightHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok {
-		Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

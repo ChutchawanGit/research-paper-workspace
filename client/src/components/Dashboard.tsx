@@ -19,11 +19,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<ReadingStatus | null>(null);
-
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [sharePaper, setSharePaper] = useState<Paper | null>(null);
   const [error, setError] = useState('');
-
   // Fetch Collections & Papers
   const fetchCollections = async () => {
     try {
@@ -103,6 +102,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenUpload={() => setIsUploadOpen(true)}
+        isSidebarOpen={isMobileSidebarOpen}
+        onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -110,17 +111,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
           collections={collections}
           activeCollectionId={activeCollectionId}
           activeStatus={activeStatus}
+          isOpen={isMobileSidebarOpen}
+          onClose={() => setIsMobileSidebarOpen(false)}
           onSelectCollection={setActiveCollectionId}
           onSelectStatus={setActiveStatus}
           onCreateCollection={handleCreateCollection}
         />
 
-        <main className="flex-1 p-8 overflow-y-auto h-[calc(100vh-4rem)]">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto h-[calc(100vh-4rem)]">
           {/* Section Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                   {activeCollection ? activeCollection.name : 'All Research Papers'}
                 </h1>
                 {activeStatus && (
@@ -136,7 +139,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
 
             <button
               onClick={() => setIsUploadOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow transition-all"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow transition-all shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Add Paper</span>
@@ -157,7 +160,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader }) => {
               <span className="text-sm">Loading research library...</span>
             </div>
           ) : papers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {papers.map((paper) => (
                 <PaperCard
                   key={paper.id}

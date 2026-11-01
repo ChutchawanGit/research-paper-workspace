@@ -7,13 +7,16 @@ import {
   Clock,
   CheckCircle2,
   Library,
-  Tag as TagIcon
+  Tag as TagIcon,
+  X
 } from 'lucide-react';
 
 interface SidebarProps {
   collections: Collection[];
   activeCollectionId: string | null;
   activeStatus: ReadingStatus | null;
+  isOpen?: boolean;
+  onClose?: () => void;
   onSelectCollection: (id: string | null) => void;
   onSelectStatus: (status: ReadingStatus | null) => void;
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
@@ -23,6 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collections,
   activeCollectionId,
   activeStatus,
+  isOpen = false,
+  onClose,
   onSelectCollection,
   onSelectStatus,
   onCreateCollection,
@@ -47,10 +52,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const handleSelectCol = (id: string | null) => {
+    onSelectCollection(id);
+    onSelectStatus(null);
+    onClose?.();
+  };
+
+  const handleSelectStat = (status: ReadingStatus | null) => {
+    onSelectStatus(status);
+    onClose?.();
+  };
+
   const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1'];
 
-  return (
-    <aside className="w-64 bg-white border-r border-slate-200 h-[calc(100vh-4rem)] flex flex-col p-4 shrink-0 overflow-y-auto">
+  const sidebarContent = (
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Mobile Drawer Header */}
+      <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 lg:hidden">
+        <div className="flex items-center gap-2">
+          <Library className="w-5 h-5 text-blue-600" />
+          <span className="font-bold text-slate-800 text-sm">Library Navigation</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
       {/* Navigation: Library Views */}
       <div className="mb-6">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-3">
@@ -58,10 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </h3>
         <nav className="space-y-1">
           <button
-            onClick={() => {
-              onSelectCollection(null);
-              onSelectStatus(null);
-            }}
+            onClick={() => handleSelectCol(null)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
               activeCollectionId === null && activeStatus === null
                 ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -83,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </h3>
         <nav className="space-y-1">
           <button
-            onClick={() => onSelectStatus('to_read')}
+            onClick={() => handleSelectStat('to_read')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all ${
               activeStatus === 'to_read'
                 ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -97,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <button
-            onClick={() => onSelectStatus('reading')}
+            onClick={() => handleSelectStat('reading')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all ${
               activeStatus === 'reading'
                 ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -111,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <button
-            onClick={() => onSelectStatus('completed')}
+            onClick={() => handleSelectStat('completed')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all ${
               activeStatus === 'completed'
                 ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -145,10 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {collections.map((col) => (
             <button
               key={col.id}
-              onClick={() => {
-                onSelectCollection(col.id);
-                onSelectStatus(null);
-              }}
+              onClick={() => handleSelectCol(col.id)}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all ${
                 activeCollectionId === col.id
                   ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -179,10 +203,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Quick Stats or Footer */}
-      <div className="pt-4 border-t border-slate-100 px-3 text-xs text-slate-400 flex items-center gap-2">
+      <div className="pt-4 border-t border-slate-100 px-3 text-xs text-slate-400 flex items-center gap-2 shrink-0">
         <TagIcon className="w-3.5 h-3.5" />
         <span>Organized by Topic & Tags</span>
       </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="w-64 bg-white border-r border-slate-200 h-[calc(100vh-4rem)] hidden lg:flex flex-col p-4 shrink-0">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Off-canvas Slide-over Drawer */}
+      {isOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden flex">
+          {/* Backdrop */}
+          <div
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+          />
+
+          {/* Drawer content */}
+          <div className="relative w-72 max-w-[80vw] bg-white h-full z-50 p-4 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
 
       {/* Add Collection Modal */}
       {showAddModal && (
@@ -263,6 +312,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       )}
-    </aside>
+    </>
   );
 };

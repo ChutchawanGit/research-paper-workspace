@@ -19,6 +19,7 @@ server/uploads/
 postgres_data/
 
 # OS and IDE files
+.codegraph/
 .DS_Store
 Thumbs.db
 .idea/

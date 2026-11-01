@@ -165,7 +165,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
   // Tools & UI Mode: 'select' for text selection, 'draw' for drag-box highlighting
   const [toolMode, setToolMode] = useState<'select' | 'draw'>('select');
-  const [showRightPane, setShowRightPane] = useState(true);
+  const [showRightPane, setShowRightPane] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   const [sidebarTab, setSidebarTab] = useState<'annotations' | 'synthesis'>('annotations');
   // Annotations state
   const [highlights, setHighlights] = useState<Highlight[]>(initialHighlights || []);
@@ -248,6 +248,16 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
     }).catch(() => {});
   }, [paper.id, isPublic]);
 
+  // Auto-scale PDF comfortably on mobile/tablet viewports
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.innerWidth < 640) {
+        setScale(0.85);
+      } else if (window.innerWidth < 1024) {
+        setScale(1.0);
+      }
+    }
+  }, []);
   // Render current page with Canvas AND TextLayer
   const renderPage = useCallback(async () => {
     if (!pdfDoc || !canvasRef.current) return;
@@ -645,33 +655,33 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-100 overflow-hidden">
       {/* Top Header Controls Bar */}
-      <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 z-30 shadow-md">
+      <header className="h-14 bg-slate-900 border-b border-slate-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 shadow-md gap-2">
         {/* Left: Back & Title */}
-        <div className="flex items-center gap-3 truncate max-w-sm">
+        <div className="flex items-center gap-2 sm:gap-3 truncate max-w-[120px] sm:max-w-xs md:max-w-sm">
           <button
             onClick={onBack}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
             title="Back to Library"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           <div className="truncate">
-            <h2 className="text-sm font-bold text-white truncate">{paper.title}</h2>
-            <p className="text-[11px] text-slate-400 truncate">{paper.authors || 'Research Paper'}</p>
+            <h2 className="text-xs sm:text-sm font-bold text-white truncate">{paper.title}</h2>
+            <p className="hidden xs:block text-[10px] sm:text-[11px] text-slate-400 truncate">{paper.authors || 'Research Paper'}</p>
           </div>
         </div>
 
         {/* Center: Viewing Mode + Tool Modes + Pagination */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-1">
           {/* Segmented Viewing Mode: Raw vs Annotated vs Edit */}
-          <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700/80">
+          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 sm:p-1 border border-slate-700/80 shrink-0">
             <button
               onClick={() => {
                 setViewingMode('raw');
                 setNewAnnotation(null);
                 setInspectedHighlight(null);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                 viewingMode === 'raw'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -679,7 +689,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               title="อ่านข้อมูลดิบ (ซ่อนไฮไลต์และโน้ตทั้งหมด)"
             >
               <EyeOff className="w-3.5 h-3.5" />
-              <span>ข้อมูลดิบ (Raw)</span>
+              <span className="hidden sm:inline">ข้อมูลดิบ (Raw)</span>
+              <span className="sm:hidden text-[11px]">ดิบ</span>
             </button>
 
             <button
@@ -687,7 +698,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 setViewingMode('annotated');
                 setNewAnnotation(null);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                 viewingMode === 'annotated'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -695,13 +706,14 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               title="อ่านพร้อมไฮไลต์และโน้ต (โหมดอ่านอย่างเดียว)"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>อ่านพร้อมโน้ต</span>
+              <span className="hidden sm:inline">อ่านพร้อมโน้ต</span>
+              <span className="sm:hidden text-[11px]">โน้ต</span>
             </button>
 
             {!isPublic && (
               <button
                 onClick={() => setViewingMode('edit')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                   viewingMode === 'edit'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
@@ -709,27 +721,28 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 title="โหมดแก้ไขและจดโน้ตเพิ่มเติม"
               >
                 <Pencil className="w-3.5 h-3.5" />
-                <span>จดโน้ต (Edit)</span>
+                <span className="hidden sm:inline">จดโน้ต (Edit)</span>
+                <span className="sm:hidden text-[11px]">แก้</span>
               </button>
             )}
           </div>
 
           {/* Sub-tool Selector (Only visible in 'edit' mode) */}
           {viewingMode === 'edit' && !isPublic && (
-            <div className="flex items-center bg-slate-800/90 rounded-xl p-1 border border-slate-700/80">
+            <div className="hidden sm:flex items-center bg-slate-800/90 rounded-xl p-0.5 sm:p-1 border border-slate-700/80 shrink-0">
               <button
                 onClick={() => {
                   setToolMode('select');
                   setIsDrawing(false);
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
                   toolMode === 'select'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="โหมดเลือกข้อความ (Text Selection)"
               >
-                <MousePointer className="w-3.5 h-3.5" />
+                <MousePointer className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span className="hidden md:inline">Select</span>
               </button>
 
@@ -738,30 +751,30 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                   setToolMode('draw');
                   window.getSelection()?.removeAllRanges();
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
                   toolMode === 'draw'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="โหมดลากครอบพื้นที่ (Drag to Note)"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span className="hidden md:inline">Drag to Note</span>
               </button>
             </div>
           )}
 
           {/* Pagination Controls */}
-          <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-800/80 px-1.5 sm:px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
             <button
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
               className="p-1 rounded text-slate-300 hover:bg-slate-700 disabled:opacity-40"
               title="Previous Page"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-            <span className="text-xs font-mono font-medium text-slate-300 px-2">
+            <span className="text-[11px] sm:text-xs font-mono font-medium text-slate-300 px-1 sm:px-2">
               {currentPage} / {totalPages}
             </span>
             <button
@@ -770,12 +783,12 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               className="p-1 rounded text-slate-300 hover:bg-slate-700 disabled:opacity-40"
               title="Next Page"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* Zoom Controls */}
-          <div className="hidden lg:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60">
+          <div className="hidden lg:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
             <button
               onClick={() => setScale((s) => Math.max(s - 0.15, 0.6))}
               className="p-1 rounded text-slate-300 hover:bg-slate-700"
@@ -795,23 +808,23 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
         </div>
 
         {/* Right Header Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={handleExportNotes}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
             title="Download Notes & Highlights as Markdown"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export Notes</span>
+            <span className="hidden md:inline">Export Notes</span>
           </button>
 
           {!isPublic && onShare && (
             <button
               onClick={onShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>Share</span>
+              <span className="hidden sm:inline">Share</span>
             </button>
           )}
 
@@ -823,7 +836,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                 ? 'bg-blue-600 text-white border-blue-500'
                 : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
             }`}
-            title={showRightPane ? 'Collapse Synthesis Pane' : 'Open Synthesis Pane'}
+            title={showRightPane ? 'Collapse Notes Pane' : 'Open Notes Pane'}
           >
             {showRightPane ? (
               <PanelRightClose className="w-4 h-4" />
@@ -835,7 +848,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           {!isPublic && (
             <button
               onClick={() => setShowLogoutModal(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors ml-1"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors ml-0.5"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -1171,53 +1184,71 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
         </div>
 
         {/* Dual-Pane Right Panel: Paper Notes & Synthesis */}
+        {/* Dual-Pane Right Panel: Responsive Drawer on Mobile, Side-by-Side on Desktop */}
         {showRightPane && (
-          <div className="w-[440px] bg-white text-slate-900 border-l border-slate-200 flex flex-col shrink-0 animate-in slide-in-from-right duration-200">
-            {/* Tabs Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 px-3 pt-2 bg-slate-50">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setSidebarTab('annotations')}
-                  className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
-                    sidebarTab === 'annotations'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <Highlighter className="w-3.5 h-3.5" />
-                  <span>On-Page Notes ({highlights.length})</span>
-                </button>
+          <>
+            {/* Mobile Backdrop */}
+            <div
+              onClick={() => setShowRightPane(false)}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-150"
+            />
 
-                <button
-                  onClick={() => setSidebarTab('synthesis')}
-                  className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
-                    sidebarTab === 'synthesis'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Synthesis</span>
-                </button>
-              </div>
+            <div className="fixed inset-y-0 right-0 w-full sm:w-[420px] lg:relative lg:inset-auto bg-white text-slate-900 border-l border-slate-200 flex flex-col shrink-0 z-50 lg:z-auto shadow-2xl lg:shadow-none animate-in slide-in-from-right duration-200">
+              {/* Tabs Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 pt-2 bg-slate-50">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setSidebarTab('annotations')}
+                    className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+                      sidebarTab === 'annotations'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <Highlighter className="w-3.5 h-3.5" />
+                    <span>On-Page Notes ({highlights.length})</span>
+                  </button>
 
-              {!isPublic && viewingMode === 'edit' && sidebarTab === 'synthesis' && (
-                <button
-                  onClick={handleSaveMainNote}
-                  disabled={savingNote}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm disabled:opacity-50 mb-1.5"
-                >
-                  {noteSavedFeedback ? (
-                    <>
-                      <Check className="w-3 h-3" />
-                      <span>Saved</span>
-                    </>
-                  ) : (
-                    <span>{savingNote ? 'Saving...' : 'Save Notes'}</span>
+                  <button
+                    onClick={() => setSidebarTab('synthesis')}
+                    className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+                      sidebarTab === 'synthesis'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Synthesis</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1 mb-1.5">
+                  {!isPublic && viewingMode === 'edit' && sidebarTab === 'synthesis' && (
+                    <button
+                      onClick={handleSaveMainNote}
+                      disabled={savingNote}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm disabled:opacity-50"
+                    >
+                      {noteSavedFeedback ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          <span>Saved</span>
+                        </>
+                      ) : (
+                        <span>{savingNote ? 'Saving...' : 'Save Notes'}</span>
+                      )}
+                    </button>
                   )}
-                </button>
-              )}
-            </div>
+
+                  <button
+                    onClick={() => setShowRightPane(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 lg:hidden"
+                    title="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
             {/* Tab 1: On-Page Highlights & Sticky Notes List */}
             {sidebarTab === 'annotations' && (
@@ -1317,7 +1348,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               </div>
             )}
           </div>
-        )}
+        </>
+      )}
       </div>
     </div>
   );

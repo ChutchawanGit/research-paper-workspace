@@ -33,7 +33,8 @@ import {
   LogOut,
   SlidersHorizontal,
   MoreVertical,
-  BookOpen
+  BookOpen,
+  ChevronDown
 } from 'lucide-react';
 
 // Configure same-origin pdfjs worker (eliminates cross-origin block on mobile Android & Samsung Internet)
@@ -219,6 +220,19 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
   const [showPageJumpModal, setShowPageJumpModal] = useState(false);
   const [jumpPageInput, setJumpPageInput] = useState(1);
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const modeDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showModeDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
+        setShowModeDropdown(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    return () => document.removeEventListener('pointerdown', handleOutside);
+  }, [showModeDropdown]);
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
 
@@ -775,97 +789,123 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           </div>
         </div>
 
-        {/* Center: Viewing Mode + Tool Modes + Pagination */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-1">
-          {/* Segmented Viewing Mode: Raw vs Annotated vs Edit */}
-          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 sm:p-1 border border-slate-700/80 shrink-0">
+        {/* Center: Mode Dropdown Selector */}
+        <div className="flex items-center gap-2">
+          <div ref={modeDropdownRef} className="relative">
             <button
-              onClick={() => {
-                setViewingMode('raw');
-                setNewAnnotation(null);
-                setInspectedHighlight(null);
-              }}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                viewingMode === 'raw'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="อ่านข้อมูลดิบ (ซ่อนไฮไลต์และโน้ตทั้งหมด)"
+              onClick={() => setShowModeDropdown(!showModeDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 border border-slate-700 text-xs font-semibold text-white shadow-sm transition-all"
+              title="เลือกโหมดการอ่าน / จดโน้ต"
             >
-              <EyeOff className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">ข้อมูลดิบ (Raw)</span>
-              <span className="sm:hidden text-[11px]">ดิบ</span>
+              {viewingMode === 'raw' && (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>ข้อมูลดิบ (Raw)</span>
+                </>
+              )}
+              {viewingMode === 'annotated' && (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-blue-400" />
+                  <span>อ่านพร้อมโน้ต</span>
+                </>
+              )}
+              {viewingMode === 'edit' && toolMode === 'select' && (
+                <>
+                  <MousePointer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>จดโน้ต: เลือกคำ</span>
+                </>
+              )}
+              {viewingMode === 'edit' && toolMode === 'draw' && (
+                <>
+                  <Pencil className="w-3.5 h-3.5 text-amber-400" />
+                  <span>จดโน้ต: ลากกล่อง</span>
+                </>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showModeDropdown ? 'rotate-180' : ''}`} />
             </button>
 
-            <button
-              onClick={() => {
-                setViewingMode('annotated');
-                setNewAnnotation(null);
-              }}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                viewingMode === 'annotated'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="อ่านพร้อมไฮไลต์และโน้ต (โหมดอ่านอย่างเดียว)"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">อ่านพร้อมโน้ต</span>
-              <span className="sm:hidden text-[11px]">โน้ต</span>
-            </button>
+            {/* Dropdown Card */}
+            {showModeDropdown && (
+              <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 top-11 w-64 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-1.5 z-50 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                {/* Option 1: Raw Mode */}
+                <button
+                  onClick={() => {
+                    setViewingMode('raw');
+                    setNewAnnotation(null);
+                    setInspectedHighlight(null);
+                    setShowModeDropdown(false);
+                  }}
+                  className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left transition-colors ${
+                    viewingMode === 'raw' ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' : 'hover:bg-slate-700/70 text-slate-200'
+                  }`}
+                >
+                  <EyeOff className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-xs">ข้อมูลดิบ (Raw Mode)</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">ซ่อนไฮไลต์และโน้ตทั้งหมดเพื่ออ่านเอกสารต้นฉบับ</div>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => setViewingMode('edit')}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                viewingMode === 'edit'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="โหมดแก้ไขและจดโน้ตเพิ่มเติม"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">จดโน้ต (Edit)</span>
-              <span className="sm:hidden text-[11px]">แก้</span>
-            </button>
+                {/* Option 2: Annotated Mode */}
+                <button
+                  onClick={() => {
+                    setViewingMode('annotated');
+                    setNewAnnotation(null);
+                    setShowModeDropdown(false);
+                  }}
+                  className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left transition-colors ${
+                    viewingMode === 'annotated' ? 'bg-blue-950/60 text-blue-300 border border-blue-800/60' : 'hover:bg-slate-700/70 text-slate-200'
+                  }`}
+                >
+                  <Eye className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-xs">อ่านพร้อมโน้ต (Annotated)</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">แสดงไฮไลต์และหมุดโน้ต (โหมดอ่านอย่างเดียว)</div>
+                  </div>
+                </button>
+
+                <div className="my-1 border-t border-slate-700/60" />
+
+                {/* Option 3: Edit Mode - Text Select */}
+                <button
+                  onClick={() => {
+                    setViewingMode('edit');
+                    setToolMode('select');
+                    setIsDrawing(false);
+                    setShowModeDropdown(false);
+                  }}
+                  className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left transition-colors ${
+                    viewingMode === 'edit' && toolMode === 'select' ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60' : 'hover:bg-slate-700/70 text-slate-200'
+                  }`}
+                >
+                  <MousePointer className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-xs">จดโน้ต: เลือกข้อความ</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">ใช้เมาส์ลากคลุมคำหรือประโยคเพื่อไฮไลต์</div>
+                  </div>
+                </button>
+
+                {/* Option 4: Edit Mode - Drag to Note */}
+                <button
+                  onClick={() => {
+                    setViewingMode('edit');
+                    setToolMode('draw');
+                    window.getSelection()?.removeAllRanges();
+                    setShowModeDropdown(false);
+                  }}
+                  className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left transition-colors ${
+                    viewingMode === 'edit' && toolMode === 'draw' ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60' : 'hover:bg-slate-700/70 text-slate-200'
+                  }`}
+                >
+                  <Pencil className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-xs">จดโน้ต: ลากครอบพื้นที่</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">ลากกล่องสี่เหลี่ยมครอบเนื้อหาหรือกราฟ</div>
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Sub-tool Selector (Only visible in 'edit' mode) */}
-          {viewingMode === 'edit' && (
-            <div className="hidden sm:flex items-center bg-slate-800/90 rounded-xl p-0.5 sm:p-1 border border-slate-700/80 shrink-0">
-              <button
-                onClick={() => {
-                  setToolMode('select');
-                  setIsDrawing(false);
-                }}
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                  toolMode === 'select'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="โหมดเลือกข้อความ (Text Selection)"
-              >
-                <MousePointer className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span className="hidden md:inline">Select</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setToolMode('draw');
-                  window.getSelection()?.removeAllRanges();
-                }}
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                  toolMode === 'draw'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="โหมดลากครอบพื้นที่ (Drag to Note)"
-              >
-                <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span className="hidden md:inline">Drag to Note</span>
-              </button>
-            </div>
-          )}
-
           {/* Desktop Pagination Controls */}
           <div className="hidden sm:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700/60 shrink-0">
             <button

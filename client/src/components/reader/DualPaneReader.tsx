@@ -165,8 +165,8 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
   // Tools & UI Mode: 'select' for text selection, 'draw' for drag-box highlighting
   const [toolMode, setToolMode] = useState<'select' | 'draw'>('select');
-  const [showRightPane, setShowRightPane] = useState(false);
-
+  const [showRightPane, setShowRightPane] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<'annotations' | 'synthesis'>('annotations');
   // Annotations state
   const [highlights, setHighlights] = useState<Highlight[]>(initialHighlights || []);
   const [notes, setNotes] = useState<Note[]>(initialNotes || []);
@@ -202,7 +202,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
-
+  const cardRef = useRef<HTMLDivElement | null>(null);
   // Load PDF Document
   useEffect(() => {
     let isCancelled = false;
@@ -522,17 +522,32 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
     setActiveHighlightId(hl.id);
   };
 
-  // Dismiss popovers and active highlights on background click
-  const handleBackgroundClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('.annotation-card') || target.closest('.note-pin')) {
-      return;
-    }
-    setActiveHighlightId(null);
-    setInspectedHighlight(null);
-    setNewAnnotation(null);
-  };
+  // Dismiss popovers and active highlights when clicking outside the active card
+  useEffect(() => {
+    if (!newAnnotation && !inspectedHighlight) return;
 
+    const handleOutsidePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (cardRef.current && cardRef.current.contains(target)) {
+        return;
+      }
+      if (target.closest('.annotation-card') || target.closest('.note-pin')) {
+        return;
+      }
+      setNewAnnotation(null);
+      setInspectedHighlight(null);
+      setActiveHighlightId(null);
+    };
+
+    const timer = setTimeout(() => {
+      document.addEventListener('pointerdown', handleOutsidePointerDown);
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+    };
+  }, [newAnnotation, inspectedHighlight]);
   // Save edited note for inspected highlight
   const handleSaveInspectedNote = async () => {
     if (!inspectedHighlight) return;
@@ -841,10 +856,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       {/* Main Reader View */}
       <div className="flex-1 flex overflow-hidden">
         {/* PDF Canvas Viewport */}
-        <div
-          onClick={handleBackgroundClick}
-          className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text"
-        >
+        <div className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text">
           {viewingMode === 'raw' && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
               <EyeOff className="w-3.5 h-3.5" />
@@ -874,7 +886,6 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           ) : (
             <div
               ref={containerRef}
-              onClick={handleBackgroundClick}
               onMouseDown={handleMouseDown}
               onMouseUp={() => {
                 if (viewingMode === 'edit' && toolMode === 'select') {
@@ -974,6 +985,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               {/* DIRECT ON-PAGE ANNOTATION CARD (Only in 'edit' mode) */}
               {viewingMode === 'edit' && newAnnotation && (
                 <div
+                  ref={cardRef}
                   className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
                   style={{
                     left: `${newAnnotation.pos.x}px`,
@@ -1055,6 +1067,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               {/* INSPECTED ON-PAGE STICKY NOTE CARD (Read-only in 'annotated' mode, Editable in 'edit' mode) */}
               {viewingMode !== 'raw' && inspectedHighlight && (
                 <div
+                  ref={cardRef}
                   className="annotation-card absolute z-40 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 w-80 text-slate-800 animate-in fade-in zoom-in-95 duration-150"
                   style={{
                     left: `${Math.min(inspectedHighlight.rects[0]?.x * 100 || 10, 65)}%`,
@@ -1157,20 +1170,42 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           )}
         </div>
 
-        {/* Optional Collapsible Right Pane: General Synthesis Notes */}
+        {/* Dual-Pane Right Panel: Paper Notes & Synthesis */}
         {showRightPane && (
-          <div className="w-[420px] bg-white text-slate-900 border-l border-slate-200 flex flex-col shrink-0 animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-blue-600" />
-                <span>Paper Synthesis Notes</span>
-              </span>
+          <div className="w-[440px] bg-white text-slate-900 border-l border-slate-200 flex flex-col shrink-0 animate-in slide-in-from-right duration-200">
+            {/* Tabs Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-3 pt-2 bg-slate-50">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setSidebarTab('annotations')}
+                  className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+                    sidebarTab === 'annotations'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <Highlighter className="w-3.5 h-3.5" />
+                  <span>On-Page Notes ({highlights.length})</span>
+                </button>
 
-              {!isPublic && viewingMode === 'edit' && (
+                <button
+                  onClick={() => setSidebarTab('synthesis')}
+                  className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+                    sidebarTab === 'synthesis'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Synthesis</span>
+                </button>
+              </div>
+
+              {!isPublic && viewingMode === 'edit' && sidebarTab === 'synthesis' && (
                 <button
                   onClick={handleSaveMainNote}
                   disabled={savingNote}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm disabled:opacity-50 mb-1.5"
                 >
                   {noteSavedFeedback ? (
                     <>
@@ -1184,13 +1219,103 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
               )}
             </div>
 
-            <div className="flex-1 p-4 overflow-hidden">
-              <TipTapEditor
-                content={mainNoteContent}
-                onChange={setMainNoteContent}
-                editable={!isPublic && viewingMode === 'edit'}
-              />
-            </div>
+            {/* Tab 1: On-Page Highlights & Sticky Notes List */}
+            {sidebarTab === 'annotations' && (
+              <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
+                {highlights.length === 0 ? (
+                  <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center">
+                    <Highlighter className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="font-medium text-slate-600">ยังไม่มีไฮไลต์และโน้ต</p>
+                    <p className="text-[11px] text-slate-400 max-w-xs mt-1">
+                      เลือกข้อความบนหน้า PDF หรือใช้โหมด Drag to Note เพื่อเริ่มไฮไลต์และจดโน้ต
+                    </p>
+                  </div>
+                ) : (
+                  highlights.map((hl) => {
+                    const attachedNote = notes.find((n) => n.highlight_id === hl.id);
+                    const isActive = activeHighlightId === hl.id;
+
+                    return (
+                      <div
+                        key={hl.id}
+                        onClick={() => {
+                          setCurrentPage(hl.page_index);
+                          handleOpenHighlight(hl);
+                        }}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                          isActive
+                            ? 'border-blue-500 bg-blue-50/50 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: hl.color || '#FBBF24' }}
+                            />
+                            <span>หน้า {hl.page_index}</span>
+                            {attachedNote && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                มีโน้ต
+                              </span>
+                            )}
+                          </span>
+
+                          {!isPublic && viewingMode === 'edit' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteHighlight(hl.id);
+                              }}
+                              className="text-slate-400 hover:text-red-500 p-1 rounded"
+                              title="Delete highlight"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-700 italic line-clamp-2 leading-relaxed mb-2">
+                          "{hl.selected_text}"
+                        </p>
+
+                        {attachedNote ? (
+                          <div className="p-2 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 flex items-start gap-1.5">
+                            <MessageSquare className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                            <p className="whitespace-pre-wrap leading-relaxed">{attachedNote.content}</p>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCurrentPage(hl.page_index);
+                              handleOpenHighlight(hl);
+                              setEditingInspectedNote(true);
+                            }}
+                            className="text-[11px] text-blue-600 hover:underline font-medium flex items-center gap-1"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>+ จดโน้ตตรงจุดนี้</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: General Synthesis TipTap Editor */}
+            {sidebarTab === 'synthesis' && (
+              <div className="flex-1 p-4 overflow-hidden">
+                <TipTapEditor
+                  content={mainNoteContent}
+                  onChange={setMainNoteContent}
+                  editable={!isPublic && viewingMode === 'edit'}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

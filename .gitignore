@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Build artifacts
+dist/
+client/dist/
+server/bin/
+bin/
+
+# Environment and secrets
+.env
+server/.env
+*.local
+
+# Database & Upload storage volumes
+uploads/
+server/uploads/
+postgres_data/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

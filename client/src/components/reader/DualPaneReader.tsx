@@ -54,9 +54,11 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
     NodeFilter.SHOW_TEXT,
     {
       acceptNode(node) {
-        return range.intersectsNode(node)
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_REJECT;
+        const nodeRange = document.createRange();
+        nodeRange.selectNodeContents(node);
+        const isAfterStart = range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0;
+        const isBeforeEnd = range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0;
+        return isAfterStart && isBeforeEnd ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       },
     }
   );
@@ -71,7 +73,15 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
 
     if (textNode === range.startContainer) {
       start = range.startOffset;
+    } else {
+      const startCheck = document.createRange();
+      startCheck.setStart(textNode, 0);
+      startCheck.setEnd(textNode, text.length);
+      if (range.compareBoundaryPoints(Range.START_TO_START, startCheck) > 0) {
+        start = range.startOffset;
+      }
     }
+
     if (textNode === range.endContainer) {
       end = range.endOffset;
     }
@@ -93,7 +103,6 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
         const subRects = subRange.getClientRects();
         for (let i = 0; i < subRects.length; i++) {
           const r = subRects[i];
-          // Filter out empty or whitespace/linebreak phantom rects
           if (r.width > 2 && r.height > 2) {
             rects.push({
               x: (r.left - containerRect.left) / containerRect.width,
@@ -109,7 +118,7 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
     currentNode = treeWalker.nextNode();
   }
 
-  // Fallback safely if treeWalker didn't find multiple nodes
+  // Fallback safely if treeWalker didn't find nodes
   if (rects.length === 0) {
     const clientRects = range.getClientRects();
     for (let i = 0; i < clientRects.length; i++) {
@@ -124,9 +133,9 @@ function getExactTextClientRects(range: Range, containerRect: DOMRect): Highligh
       }
     }
   }
-
   return rects;
 }
+
 
 export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
   paper,
@@ -513,6 +522,17 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
     setActiveHighlightId(hl.id);
   };
 
+  // Dismiss popovers and active highlights on background click
+  const handleBackgroundClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.annotation-card') || target.closest('.note-pin')) {
+      return;
+    }
+    setActiveHighlightId(null);
+    setInspectedHighlight(null);
+    setNewAnnotation(null);
+  };
+
   // Save edited note for inspected highlight
   const handleSaveInspectedNote = async () => {
     if (!inspectedHighlight) return;
@@ -821,8 +841,10 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
       {/* Main Reader View */}
       <div className="flex-1 flex overflow-hidden">
         {/* PDF Canvas Viewport */}
-        <div className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text">
-          {/* Floating mode banner helpers */}
+        <div
+          onClick={handleBackgroundClick}
+          className="flex-1 bg-slate-950 overflow-auto flex justify-center p-6 relative select-text"
+        >
           {viewingMode === 'raw' && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-none animate-in fade-in duration-150">
               <EyeOff className="w-3.5 h-3.5" />
@@ -852,6 +874,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
           ) : (
             <div
               ref={containerRef}
+              onClick={handleBackgroundClick}
               onMouseDown={handleMouseDown}
               onMouseUp={() => {
                 if (viewingMode === 'edit' && toolMode === 'select') {
@@ -903,11 +926,14 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                         {hl.rects.map((r, i) => (
                           <div
                             key={i}
-                            onClick={() => handleOpenHighlight(hl)}
-                            className={`absolute cursor-pointer transition-opacity z-10 ${
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenHighlight(hl);
+                            }}
+                            className={`absolute cursor-pointer transition-all ${
                               activeHighlightId === hl.id
-                                ? 'opacity-85 ring-2 ring-blue-500 ring-offset-1'
-                                : 'opacity-40 hover:opacity-75'
+                                ? 'ring-2 ring-blue-500 ring-offset-1 z-20'
+                                : 'hover:opacity-90 z-10'
                             }`}
                             style={{
                               left: `${r.x * 100}%`,
@@ -915,6 +941,10 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
                               width: `${r.width * 100}%`,
                               height: `${r.height * 100}%`,
                               backgroundColor: hl.color || '#FBBF24',
+                              mixBlendMode: 'multiply',
+                              opacity: 0.65,
+                              borderRadius: '2px',
+                              pointerEvents: viewingMode === 'edit' && toolMode === 'draw' ? 'none' : 'auto',
                             }}
                             title={hl.selected_text}
                           />

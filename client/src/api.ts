@@ -141,10 +141,16 @@ export const collectionsApi = {
 };
 
 export const papersApi = {
-  list: async (params?: { collection_id?: string; tag_id?: string; status?: string; q?: string; limit?: number; offset?: number }) => {
+  list: async (params?: { collection_id?: string; tag_id?: string; status?: string; q?: string; limit?: number; offset?: number; mode?: 'my_library' | 'explore_published'; user_id?: string }) => {
     let query = supabase
       .from('papers')
       .select('*, collections(name, color), highlights(id), notes(id)', { count: 'exact' });
+
+    if (params?.mode === 'explore_published' || !params?.user_id) {
+      query = query.eq('is_published', true);
+    } else if (params?.mode === 'my_library' && params?.user_id) {
+      query = query.eq('user_id', params.user_id);
+    }
 
     if (params?.collection_id) {
       query = query.eq('collection_id', params.collection_id);
@@ -182,6 +188,9 @@ export const papersApi = {
       file_size: p.file_size || 0,
       page_count: p.page_count || 1,
       reading_status: (p.reading_status || 'to_read') as ReadingStatus,
+      is_published: Boolean(p.is_published),
+      forked_from_id: p.forked_from_id || null,
+      owner_name: p.owner_name || '',
       highlight_count: Array.isArray(p.highlights) ? p.highlights.length : 0,
       note_count: Array.isArray(p.notes) ? p.notes.length : 0,
       created_at: p.created_at,
@@ -236,6 +245,7 @@ export const papersApi = {
       .getPublicUrl(storagePath);
 
     // 2. Insert metadata into "papers" table
+    const isPublished = formData.get('is_published') === 'true';
     const { data: paper, error: dbError } = await supabase
       .from('papers')
       .insert([{
@@ -251,12 +261,107 @@ export const papersApi = {
         file_size: file.size,
         page_count: 1,
         reading_status: 'to_read',
+        is_published: isPublished,
+        owner_name: user?.name || '',
       }])
       .select()
       .single();
 
     if (dbError) throw dbError;
     return { data: paper as Paper };
+  },
+
+  togglePublish: async (id: string, isPublished: boolean) => {
+    const { data: updated, error } = await supabase
+      .from('papers')
+      .update({ is_published: isPublished })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return { data: updated as Paper };
+  },
+
+  fork: async (sourcePaperId: string) => {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('Please sign in to clone this paper into your workspace.');
+
+    // 1. Fetch source paper
+    const { data: source, error: srcErr } = await supabase
+      .from('papers')
+      .select('*')
+      .eq('id', sourcePaperId)
+      .single();
+    if (srcErr || !source) throw new Error('Source paper not found.');
+
+    // 2. Insert cloned paper into current user's workspace (private by default)
+    const { data: forkedPaper, error: forkErr } = await supabase
+      .from('papers')
+      .insert([{
+        user_id: user.id,
+        collection_id: null,
+        title: source.title,
+        authors: source.authors || '',
+        abstract: source.abstract || '',
+        publication_date: source.publication_date || '',
+        doi: source.doi || '',
+        file_hash: source.file_hash || '',
+        file_path: source.file_path,
+        file_size: source.file_size || 0,
+        page_count: source.page_count || 1,
+        reading_status: 'to_read',
+        is_published: false,
+        forked_from_id: source.id,
+        owner_name: user.name,
+      }])
+      .select()
+      .single();
+    if (forkErr || !forkedPaper) throw forkErr || new Error('Failed to clone paper.');
+
+    // 3. Clone highlights & notes from source paper so user has an independent editable copy
+    const { data: srcHighlights } = await supabase
+      .from('highlights')
+      .select('*')
+      .eq('paper_id', sourcePaperId);
+
+    const highlightIdMap = new Map<string, string>();
+    if (srcHighlights && srcHighlights.length > 0) {
+      for (const h of srcHighlights) {
+        const { data: newHl } = await supabase
+          .from('highlights')
+          .insert([{
+            paper_id: forkedPaper.id,
+            user_id: user.id,
+            page_index: h.page_index,
+            rects: h.rects,
+            selected_text: h.selected_text,
+            color: h.color,
+          }])
+          .select()
+          .single();
+        if (newHl) {
+          highlightIdMap.set(h.id, newHl.id);
+        }
+      }
+    }
+
+    const { data: srcNotes } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('paper_id', sourcePaperId);
+
+    if (srcNotes && srcNotes.length > 0) {
+      const clonedNotes = srcNotes.map((n: any) => ({
+        paper_id: forkedPaper.id,
+        user_id: user.id,
+        highlight_id: n.highlight_id ? (highlightIdMap.get(n.highlight_id) || null) : null,
+        title: n.title || '',
+        content: n.content,
+      }));
+      await supabase.from('notes').insert(clonedNotes);
+    }
+
+    return { data: forkedPaper as Paper };
   },
 
   update: async (id: string, data: Partial<Paper> & { tags?: string[] }) => {

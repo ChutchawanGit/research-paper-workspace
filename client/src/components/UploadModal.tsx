@@ -23,6 +23,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [doi, setDoi] = useState('');
   const [collectionId, setCollectionId] = useState('');
   const [tags, setTags] = useState('');
+  const [isPublished, setIsPublished] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,6 +63,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     formData.append('doi', doi);
     if (collectionId) formData.append('collection_id', collectionId);
     if (tags) formData.append('tags', tags);
+    formData.append('is_published', String(isPublished));
 
     try {
       await onUpload(formData);
@@ -239,6 +241,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
           </div>
+
+          {/* Publish Visibility Toggle */}
+          <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 cursor-pointer hover:bg-slate-50 transition-colors">
+            <input
+              type="checkbox"
+              checked={isPublished}
+              onChange={(e) => setIsPublished(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <div className="text-xs">
+              <span className="font-semibold text-slate-800 block">
+                Publish to Community Hub (สาธารณะ)
+              </span>
+              <span className="text-slate-500">
+                Allow anyone (including guests) to read and fork/clone a copy of this paper into their own workspace. Only you can edit or delete the original.
+              </span>
+            </div>
+          </label>
 
           {/* Footer Controls */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">

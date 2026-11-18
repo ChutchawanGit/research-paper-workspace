@@ -20,14 +20,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeView, setActiveView] = useState<'my_library' | 'explore_published'>(
+    user ? 'my_library' : 'explore_published'
+  );
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<ReadingStatus | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [sharePaper, setSharePaper] = useState<Paper | null>(null);
   const [error, setError] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Auto-switch view when auth state changes
+  useEffect(() => {
+    if (!user) {
+      setActiveView('explore_published');
+      setActiveCollectionId(null);
+      setActiveStatus(null);
+    } else {
+      setActiveView('my_library');
+    }
+  }, [user?.id]);
+
   // Fetch Collections & Papers
   const fetchCollections = async () => {
+    if (!user) {
+      setCollections([]);
+      return;
+    }
     try {
       const res = await collectionsApi.list();
       setCollections(res.data);
@@ -41,9 +61,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
     setError('');
     try {
       const res = await papersApi.list({
-        collection_id: activeCollectionId || undefined,
-        status: activeStatus || undefined,
+        collection_id: activeView === 'my_library' ? activeCollectionId || undefined : undefined,
+        status: activeView === 'my_library' ? activeStatus || undefined : undefined,
         q: searchQuery || undefined,
+        mode: user ? activeView : 'explore_published',
+        user_id: user?.id,
       });
       setPapers(res.data.papers || []);
     } catch (err: unknown) {
@@ -55,14 +77,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
 
   useEffect(() => {
     fetchCollections();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchPapers();
     }, 200);
     return () => clearTimeout(timer);
-  }, [activeCollectionId, activeStatus, searchQuery]);
+  }, [activeView, activeCollectionId, activeStatus, searchQuery, user?.id]);
 
   const handleCreateCollection = async (name: string, description: string, color: string) => {
     await collectionsApi.create({ name, description, color });
@@ -97,6 +119,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
     }
   };
 
+  const handleTogglePublish = async (id: string, isPublished: boolean) => {
+    try {
+      await papersApi.togglePublish(id, isPublished);
+      setPapers((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, is_published: isPublished } : p))
+      );
+      setToastMsg(isPublished ? 'Paper is now Published to Community Hub!' : 'Paper is now Private.');
+      setTimeout(() => setToastMsg(''), 3000);
+    } catch (err: unknown) {
+      alert('Failed to update visibility');
+    }
+  };
+
+  const handleForkPaper = async (paper: Paper) => {
+    if (!user) {
+      onOpenSignIn?.();
+      return;
+    }
+    try {
+      await papersApi.fork(paper.id);
+      setToastMsg(`Cloned "${paper.title}" to your personal My Library!`);
+      setTimeout(() => setToastMsg(''), 3500);
+      setActiveView('my_library');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to clone paper');
+    }
+  };
+
   const activeCollection = collections.find((c) => c.id === activeCollectionId);
 
   return (
@@ -121,8 +171,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
           collections={collections}
           activeCollectionId={activeCollectionId}
           activeStatus={activeStatus}
+          activeView={activeView}
+          isLoggedIn={Boolean(user)}
           isOpen={isMobileSidebarOpen}
           onClose={() => setIsMobileSidebarOpen(false)}
+          onSelectView={setActiveView}
           onSelectCollection={setActiveCollectionId}
           onSelectStatus={setActiveStatus}
           onCreateCollection={handleCreateCollection}
@@ -134,16 +187,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                  {activeCollection ? activeCollection.name : 'All Research Papers'}
+                  {activeView === 'explore_published'
+                    ? 'Explore Published Papers'
+                    : activeCollection
+                    ? activeCollection.name
+                    : 'My Research Library'}
                 </h1>
-                {activeStatus && (
+                {activeView === 'my_library' && activeStatus && (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 capitalize">
                     {activeStatus.replace('_', ' ')}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {activeCollection?.description || 'Your collected papers, annotations, and study notes.'}
+                {activeView === 'explore_published'
+                  ? 'Browse public research papers shared by the community. Clone any paper into your workspace to annotate.'
+                  : activeCollection?.description || 'Your personal papers, highlights, and private study notes.'}
               </p>
             </div>
 
@@ -161,6 +220,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
               <span>Add Paper</span>
             </button>
           </div>
+
+          {toastMsg && (
+            <div className="mb-6 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-center justify-between shadow-xs">
+              <span>{toastMsg}</span>
+              <button onClick={() => setToastMsg('')} className="text-emerald-500 hover:text-emerald-700 text-xs font-bold px-2">✕</button>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center gap-2">
@@ -181,10 +247,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenReader, onOpenSignIn
                 <PaperCard
                   key={paper.id}
                   paper={paper}
+                  currentUserId={user?.id}
                   onOpenReader={onOpenReader}
                   onShare={setSharePaper}
                   onDelete={handleDeletePaper}
                   onStatusChange={handleStatusChange}
+                  onTogglePublish={handleTogglePublish}
+                  onFork={handleForkPaper}
                 />
               ))}
             </div>

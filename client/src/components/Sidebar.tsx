@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Library,
   Tag as TagIcon,
+  Globe,
   X
 } from 'lucide-react';
 
@@ -15,8 +16,11 @@ interface SidebarProps {
   collections: Collection[];
   activeCollectionId: string | null;
   activeStatus: ReadingStatus | null;
+  activeView: 'my_library' | 'explore_published';
+  isLoggedIn: boolean;
   isOpen?: boolean;
   onClose?: () => void;
+  onSelectView: (view: 'my_library' | 'explore_published') => void;
   onSelectCollection: (id: string | null) => void;
   onSelectStatus: (status: ReadingStatus | null) => void;
   onCreateCollection: (name: string, description: string, color: string) => Promise<void>;
@@ -26,8 +30,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collections,
   activeCollectionId,
   activeStatus,
+  activeView,
+  isLoggedIn,
   isOpen = false,
   onClose,
+  onSelectView,
   onSelectCollection,
   onSelectStatus,
   onCreateCollection,
@@ -53,13 +60,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleSelectCol = (id: string | null) => {
+    onSelectView('my_library');
     onSelectCollection(id);
     onSelectStatus(null);
     onClose?.();
   };
 
   const handleSelectStat = (status: ReadingStatus | null) => {
+    onSelectView('my_library');
     onSelectStatus(status);
+    onClose?.();
+  };
+
+  const handleSelectExplore = () => {
+    onSelectView('explore_published');
+    onSelectCollection(null);
+    onSelectStatus(null);
     onClose?.();
   };
 
@@ -84,27 +100,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation: Library Views */}
       <div className="mb-6">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-3">
-          Library
+          Workspace
         </h3>
         <nav className="space-y-1">
           <button
-            onClick={() => handleSelectCol(null)}
+            onClick={handleSelectExplore}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              activeCollectionId === null && activeStatus === null
-                ? 'bg-blue-50 text-blue-700 font-semibold'
+              activeView === 'explore_published'
+                ? 'bg-emerald-50 text-emerald-700 font-semibold'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Library className="w-4 h-4 text-slate-400" />
-              <span>All Papers</span>
+              <Globe className={`w-4 h-4 ${activeView === 'explore_published' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Explore Published</span>
             </div>
           </button>
+
+          {isLoggedIn && (
+            <button
+              onClick={() => handleSelectCol(null)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeView === 'my_library' && activeCollectionId === null && activeStatus === null
+                  ? 'bg-blue-50 text-blue-700 font-semibold'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Library className={`w-4 h-4 ${activeView === 'my_library' && activeCollectionId === null && activeStatus === null ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span>My Library</span>
+              </div>
+            </button>
+          )}
         </nav>
       </div>
 
-      {/* Reading Status Filters */}
-      <div className="mb-6">
+      {/* Reading Status Filters (Personal Library Only) */}
+      {isLoggedIn && (
+        <div className="mb-6">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-3">
           Reading Status
         </h3>
@@ -152,6 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </nav>
       </div>
+      )}
 
       {/* Collections Section */}
       <div className="flex-1">

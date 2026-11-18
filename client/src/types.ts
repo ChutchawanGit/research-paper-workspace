@@ -39,6 +39,9 @@ export interface Paper {
   file_size: number;
   page_count: number;
   reading_status: ReadingStatus;
+  is_published?: boolean;
+  forked_from_id?: string | null;
+  owner_name?: string;
   tags?: Tag[];
   highlight_count?: number;
   note_count?: number;

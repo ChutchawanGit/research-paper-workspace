@@ -67,7 +67,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       await onUpload(formData);
       onClose();
     } catch (err: unknown) {
-      setError('Failed to upload paper. Please try again.');
+      let msg = 'Failed to upload paper. Please try again.';
+      if (err instanceof Error) {
+        msg = err.message;
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        msg = String((err as any).message);
+      }
+      setError(msg);
     } finally {
       setUploading(false);
     }

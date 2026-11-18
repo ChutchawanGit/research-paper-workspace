@@ -23,13 +23,40 @@ export const authApi = {
       },
     });
     if (error) throw error;
+
+    // If session is returned directly
+    if (authData.session) {
+      const user: User = {
+        id: authData.user?.id || '',
+        email: authData.user?.email || data.email,
+        name: data.name,
+        created_at: authData.user?.created_at || new Date().toISOString(),
+      };
+      return { data: { user, token: authData.session.access_token } };
+    }
+
+    // Try instant login in case confirmation was bypassed
+    const { data: loginData } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+    if (loginData?.session) {
+      const user: User = {
+        id: loginData.user?.id || '',
+        email: loginData.user?.email || data.email,
+        name: data.name,
+        created_at: loginData.user?.created_at || new Date().toISOString(),
+      };
+      return { data: { user, token: loginData.session.access_token } };
+    }
+
     const user: User = {
       id: authData.user?.id || '',
       email: authData.user?.email || data.email,
       name: data.name,
       created_at: authData.user?.created_at || new Date().toISOString(),
     };
-    return { data: { user, token: authData.session?.access_token || '' } };
+    return { data: { user, token: '' } };
   },
 
   login: async (data: { email: string; password: string }) => {

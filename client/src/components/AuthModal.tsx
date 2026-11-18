@@ -30,9 +30,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       } else {
         await login(email, password);
       }
+      setLoading(false);
+      onClose?.();
     } catch (err: unknown) {
       let msg = 'Authentication failed. Please check your credentials.';
-      if (axios.isAxiosError(err) && err.response?.data?.error) {
+      if (err instanceof Error) {
+        msg = err.message;
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        msg = String((err as any).message);
+      } else if (axios.isAxiosError(err) && err.response?.data?.error) {
         msg = String(err.response.data.error);
       }
       setError(msg);

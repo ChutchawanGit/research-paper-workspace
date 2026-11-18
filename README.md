@@ -1,4 +1,4 @@
-# Research Paper Reading & Annotation Platform (Paper Platform)
+# Research Paper Workspace (Paper Platform)
 
 > A modern, multi-user SaaS web platform for collecting, categorizing, reading, and annotating research PDF papers, built as a flagship developer portfolio product for general users (students, researchers, and technical readers).
 

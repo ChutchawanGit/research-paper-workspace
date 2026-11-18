@@ -85,7 +85,7 @@ export const PublicShareView: React.FC<PublicShareViewProps> = ({
       <div className="flex-1 overflow-hidden">
         <DualPaneReader
           paper={data.paper}
-          pdfUrl={shareApi.publicPdfUrl(token)}
+          pdfUrl={data.paper.file_path || shareApi.publicPdfUrl(token)}
           isPublic={true}
           initialHighlights={data.highlights}
           initialNotes={data.notes}

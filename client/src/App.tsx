@@ -52,7 +52,7 @@ function MainApp() {
       <>
         <DualPaneReader
           paper={activePaper}
-          pdfUrl={papersApi.pdfUrl(activePaper.id)}
+          pdfUrl={activePaper.file_path || papersApi.pdfUrl(activePaper.id)}
           isPublic={!user}
           onBack={() => setActivePaper(null)}
           onShare={() => setSharePaper(activePaper)}

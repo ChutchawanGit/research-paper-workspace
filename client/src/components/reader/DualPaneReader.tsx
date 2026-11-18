@@ -283,7 +283,7 @@ export const DualPaneReader: React.FC<DualPaneReaderProps> = ({
 
     const loadingTask = pdfjsLib.getDocument({
       url: pdfUrl,
-      withCredentials: true,
+      withCredentials: false,
       cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',
       cMapPacked: true,
       enableXfa: true,

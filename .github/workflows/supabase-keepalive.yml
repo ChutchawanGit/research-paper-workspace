@@ -1,0 +1,24 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Run every 3 days at 04:00 UTC (11:00 AM BKK) to keep Supabase DB active and never pause
+    - cron: '0 4 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcnJ3eGd4b2p4aWhybmJqcHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ5NTU2NTUsImV4cCI6MjExMDUzMTY1NX0.JOAtbhV_plIdINb7vmeGbAtFfkS5fVlghGTJA28KLsk' }}" \
+            "https://dmrrwxgxojxihrnbjprs.supabase.co/rest/v1/collections?select=id&limit=1")
+          echo "Supabase Ping Response: $RESPONSE"
+          if [ "$RESPONSE" -eq 200 ]; then
+            echo "Supabase is active and healthy!"
+          else
+            echo "Unexpected response code: $RESPONSE"
+            exit 1
+          fi
